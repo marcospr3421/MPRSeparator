@@ -69,6 +69,7 @@ class SQLService:
             return 0
         
         records_saved = 0
+        failed_records = 0
         
         try:
             # Connect to the database
@@ -103,16 +104,29 @@ class SQLService:
                 
                 # Check if cursor is available before executing
                 if self.cursor:
-                    # Execute the query
-                    self.cursor.execute(insert_query, (order_number, separator_name, date_str, analysis))
-                    records_saved += 1
+                    try:
+                        # Execute the query
+                        self.cursor.execute(insert_query, (order_number, separator_name, date_str, analysis))
+                        records_saved += 1
+                    except pyodbc.IntegrityError as e:
+                        # Log but continue - allows us to skip duplicate records
+                        error_msg = str(e)
+                        if "UNIQUE KEY" in error_msg or "UNIQUE constraint" in error_msg:
+                            self.logger.warning(f"Skipping duplicate record: {order_number}, {separator_name}")
+                            failed_records += 1
+                        else:
+                            # Re-raise if it's another type of integrity error
+                            raise
                 else:
                     raise ValueError("Database cursor is not available")
             
             # Commit the transaction
             if self.connection:
                 self.connection.commit()
-                self.logger.info(f"Successfully saved {records_saved} records to database")
+                if failed_records > 0:
+                    self.logger.info(f"Successfully saved {records_saved} records to database, {failed_records} records skipped due to duplicates")
+                else:
+                    self.logger.info(f"Successfully saved {records_saved} records to database")
             else:
                 raise ValueError("Database connection is not available")
             
@@ -143,7 +157,7 @@ class SQLService:
             table_name = os.environ.get("DB_TABLE", "SeparatorRecords")
             
             # Build the SQL query with filters
-            query = f"SELECT OrderNumber, SeparatorName, DateOfSeparation, Analysis FROM {table_name} WHERE 1=1"
+            query = f"SELECT Id, OrderNumber, SeparatorName, DateOfSeparation, Analysis FROM {table_name} WHERE 1=1"
             params = []
             
             # Add date filters if specified
@@ -184,7 +198,7 @@ class SQLService:
             
             # Make sure cursor.description is available
             if not self.cursor.description:
-                return pd.DataFrame(columns=['OrderNumber', 'SeparatorName', 'DateOfSeparation', 'Analysis'])
+                return pd.DataFrame(columns=['Id', 'OrderNumber', 'SeparatorName', 'DateOfSeparation', 'Analysis'])
             
             # Convert to DataFrame
             columns = [column[0] for column in self.cursor.description]
@@ -198,6 +212,169 @@ class SQLService:
             
         except Exception as e:
             self.logger.error(f"Error fetching data from database: {str(e)}")
+            raise
+            
+        finally:
+            # Disconnect from the database
+            self.disconnect() 
+
+    def load_data(self, days=7):
+        """Load data from the database with a default filter of the past 7 days
+        
+        Args:
+            days (int): Number of days to look back. Default is 7.
+        """
+        try:
+            # Calculate date range for last X days
+            import datetime
+            end_date = datetime.datetime.now().strftime('%Y-%m-%d')
+            start_date = (datetime.datetime.now() - datetime.timedelta(days=days)).strftime('%Y-%m-%d')
+            
+            # Fetch data with date filter
+            return self.fetch_data(from_date=start_date, to_date=end_date)
+        except Exception as e:
+            self.logger.error(f"Error loading data from database: {str(e)}")
+            raise
+            
+    def delete_record(self, record_id):
+        """Delete a record from the database by ID
+        
+        Args:
+            record_id (int): The ID of the record to delete
+            
+        Returns:
+            bool: True if deletion was successful, False otherwise
+        """
+        try:
+            # Connect to the database
+            if not self.connection or not self.cursor:
+                if not self.connect():
+                    raise ValueError("Failed to establish database connection")
+            
+            # Get the table name from environment variables, with a default
+            table_name = os.environ.get("DB_TABLE", "SeparatorRecords")
+            
+            # SQL query for deletion
+            delete_query = f"DELETE FROM {table_name} WHERE Id = ?"
+            
+            # Execute the deletion
+            if self.cursor:
+                self.cursor.execute(delete_query, (record_id,))
+                
+                # Check if a row was affected
+                rows_affected = self.cursor.rowcount
+                
+                # Commit the transaction
+                if self.connection:
+                    self.connection.commit()
+                    
+                    if rows_affected > 0:
+                        self.logger.info(f"Successfully deleted record with ID {record_id}")
+                        return True
+                    else:
+                        self.logger.warning(f"No record found with ID {record_id}")
+                        return False
+            
+            return False
+                
+        except Exception as e:
+            self.logger.error(f"Error deleting record from database: {str(e)}")
+            if self.connection:
+                self.connection.rollback()
+            raise
+            
+        finally:
+            # Disconnect from the database
+            self.disconnect() 
+
+    def load_all_data(self):
+        """Load all data from the database without date filters"""
+        try:
+            # Fetch all data without any filters
+            return self.fetch_data()
+        except Exception as e:
+            self.logger.error(f"Error loading all data from database: {str(e)}")
+            raise 
+
+    def update_record(self, record_id, data):
+        """Update a record in the database
+        
+        Args:
+            record_id (int): The ID of the record to update
+            data (dict): Dictionary containing the fields to update
+            
+        Returns:
+            bool: True if update was successful, False otherwise
+        """
+        try:
+            # Connect to the database
+            if not self.connection or not self.cursor:
+                if not self.connect():
+                    raise ValueError("Failed to establish database connection")
+            
+            # Get the table name from environment variables, with a default
+            table_name = os.environ.get("DB_TABLE", "SeparatorRecords")
+            
+            # Prepare SET clause and parameters
+            set_clauses = []
+            parameters = []
+            
+            # Extract fields to update
+            if 'OrderNumber' in data:
+                set_clauses.append("OrderNumber = ?")
+                parameters.append(str(data['OrderNumber']))
+                
+            if 'SeparatorName' in data:
+                set_clauses.append("SeparatorName = ?")
+                parameters.append(str(data['SeparatorName']))
+                
+            if 'DateOfSeparation' in data:
+                set_clauses.append("DateOfSeparation = ?")
+                date_str = None
+                if data['DateOfSeparation']:
+                    date_str = pd.to_datetime(data['DateOfSeparation']).strftime('%Y-%m-%d')
+                parameters.append(date_str)
+                
+            if 'Analysis' in data:
+                set_clauses.append("Analysis = ?")
+                analysis = 1 if data['Analysis'] else 0
+                parameters.append(analysis)
+            
+            # If no fields to update, return early
+            if not set_clauses:
+                self.logger.warning("No fields to update")
+                return False
+            
+            # Build the UPDATE query
+            update_query = f"UPDATE {table_name} SET {', '.join(set_clauses)} WHERE Id = ?"
+            
+            # Add the ID parameter
+            parameters.append(record_id)
+            
+            # Execute the update
+            if self.cursor:
+                self.cursor.execute(update_query, parameters)
+                
+                # Check if a row was affected
+                rows_affected = self.cursor.rowcount
+                
+                # Commit the transaction
+                if self.connection:
+                    self.connection.commit()
+                    
+                    if rows_affected > 0:
+                        self.logger.info(f"Successfully updated record with ID {record_id}")
+                        return True
+                    else:
+                        self.logger.warning(f"No record found with ID {record_id}")
+                        return False
+            
+            return False
+                
+        except Exception as e:
+            self.logger.error(f"Error updating record in database: {str(e)}")
+            if self.connection:
+                self.connection.rollback()
             raise
             
         finally:

@@ -11,6 +11,9 @@ class DataModel:
         """Set the data from a dataframe and standardize column names"""
         # Standardize column names (case-insensitive)
         std_columns = {
+            'id': 'Id',
+            'record_id': 'Id',
+            'recordid': 'Id',
             'ordernumber': 'OrderNumber',
             'order': 'OrderNumber',
             'order number': 'OrderNumber',
@@ -108,7 +111,7 @@ class DataModel:
         mask = (self.original_df['DateOfSeparation'] >= start_date) & (self.original_df['DateOfSeparation'] <= end_date)
         self.filtered_df = self.original_df[mask].copy()
     
-    def apply_filters(self, from_date=None, to_date=None, order_number=None, separator_name=None, analysis_only=False):
+    def apply_filters(self, from_date=None, to_date=None, order_number=None, separator_name=None, record_id=None, analysis_only=False):
         """Apply filters to the data"""
         if self.original_df is None:
             return
@@ -124,6 +127,10 @@ class DataModel:
             # Add one day to include the end date fully
             to_date_inclusive = pd.Timestamp(to_date) + pd.Timedelta(days=1)
             filtered_df = filtered_df[filtered_df['DateOfSeparation'] < to_date_inclusive]
+        
+        # Apply record ID filter if specified
+        if record_id and 'Id' in filtered_df.columns:
+            filtered_df = filtered_df[filtered_df['Id'].astype(str) == record_id]
         
         # Apply order number filter if specified
         if order_number:
