@@ -2,10 +2,10 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QPushButton, QLabel, QFileDialog, QMessageBox,
     QTableView, QHeaderView, QCheckBox, QDateEdit, QDialog, QFormLayout, QLineEdit, QDialogButtonBox,
-    QGroupBox
+    QGroupBox, QFrame
 )
-from PySide6.QtCore import Qt, QDate
-from PySide6.QtGui import QStandardItemModel, QStandardItem
+from PySide6.QtCore import Qt, QDate, QSortFilterProxyModel, QModelIndex
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QIcon, QPixmap, QBrush, QColor
 
 import pandas as pd
 import os
@@ -13,6 +13,30 @@ from datetime import datetime, timedelta
 
 from src.data.data_model import DataModel
 from src.services.sql_service import SQLService
+
+class SortableTableModel(QStandardItemModel):
+    """Custom model that handles sorting properly for different data types"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.sort_order = {}  # Track sort order for each column
+        
+    def sort(self, column, order):
+        # Skip the checkbox column (column 0)
+        if column == 0:
+            return
+            
+        # For date column, use the timestamp data for proper sorting
+        if column == 3:  # Date column
+            self.setSortRole(Qt.ItemDataRole.UserRole)
+        # For analysis column, use the boolean value for sorting
+        elif column == 4:  # Analysis column
+            self.setSortRole(Qt.ItemDataRole.UserRole)
+        else:
+            # Use display text for other columns
+            self.setSortRole(Qt.ItemDataRole.DisplayRole)
+            
+        # Call the parent sort method
+        super().sort(column, order)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -159,17 +183,48 @@ class MainWindow(QMainWindow):
     def setup_data_table(self):
         """Create the data table view"""
         self.table_view = QTableView()
-        self.table_model = QStandardItemModel()
+        
+        # Use the custom sortable model
+        self.table_model = SortableTableModel()
+        
+        # Create a proxy model for sorting
+        self.proxy_model = QSortFilterProxyModel()
+        self.proxy_model.setSourceModel(self.table_model)
+        
+        # Setup custom sorting
+        self.proxy_model.setSortCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         
         # Set headers for the table
         self.table_model.setHorizontalHeaderLabels([
             "Select", "Order Number", "Separator Name", "Date of Separation", "Analysis"
         ])
         
-        self.table_view.setModel(self.table_model)
-        self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        # Set the proxy model to the view
+        self.table_view.setModel(self.proxy_model)
+        
+        # Configure the header for sorting
+        header = self.table_view.horizontalHeader()
+        header.setSortIndicatorShown(True)
+        header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder)  # Default no sort
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        
+        # Connect sorting signal
+        header.sortIndicatorChanged.connect(self.on_sort_changed)
+        
+        # Enable sorting
+        self.table_view.setSortingEnabled(True)
+        
         # Make the select column narrower
         self.table_view.setColumnWidth(0, 50)
+        
+        # Disable direct editing of cells
+        self.table_view.setEditTriggers(QTableView.EditTrigger.NoEditTriggers)
+        
+        # Enable row selection
+        self.table_view.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
+        
+        # Connect double-click signal to open edit dialog
+        self.table_view.doubleClicked.connect(self.handle_double_click)
         
         self.main_layout.addWidget(self.table_view)
     
@@ -392,15 +447,21 @@ class MainWindow(QMainWindow):
                 try:
                     date_obj = pd.to_datetime(date_str)
                     date_str = date_obj.strftime('%Y-%m-%d')
+                    # Store the original date for proper sorting
+                    date_item = QStandardItem(date_str)
+                    date_item.setData(date_obj.timestamp(), Qt.ItemDataRole.UserRole)
                 except:
-                    pass
-            date_item = QStandardItem(date_str)
+                    date_item = QStandardItem(date_str)
+            else:
+                date_item = QStandardItem(date_str)
             
             # Handle analysis boolean
             analysis_value = row.get('Analysis', False)
             analysis_item = QStandardItem()
             analysis_item.setCheckable(True)
             analysis_item.setCheckState(Qt.CheckState.Checked if analysis_value else Qt.CheckState.Unchecked)
+            # Store a numeric value for sorting
+            analysis_item.setData(1 if analysis_value else 0, Qt.ItemDataRole.UserRole)
             
             # Add the row to the table (without ID column)
             row_items = [select_item, order_item, name_item, date_item, analysis_item]
@@ -409,6 +470,9 @@ class MainWindow(QMainWindow):
         # Update status bar with record count
         record_count = len(df)
         self.statusBar().showMessage(f"Displaying {record_count} records")
+        
+        # Reset sort indicator
+        self.table_view.horizontalHeader().setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
     
     def set_today_filter(self):
         """Set date filter to today only"""
@@ -480,6 +544,15 @@ class MainWindow(QMainWindow):
         """Open a dialog to edit selected records"""
         selected_rows = self.get_selected_rows()
         if not selected_rows:
+            # If no rows are explicitly selected via checkboxes, 
+            # check if there's a current row selected in the table
+            selected_indexes = self.table_view.selectionModel().selectedRows()
+            if selected_indexes:
+                # Map proxy indexes to source model indexes
+                source_rows = [self.proxy_model.mapToSource(idx).row() for idx in selected_indexes]
+                self.open_edit_dialog(source_rows)
+                return
+        
             QMessageBox.warning(
                 self,
                 "No Selection",
@@ -549,9 +622,20 @@ class MainWindow(QMainWindow):
         # Create a dialog for editing
         edit_dialog = QDialog(self)
         edit_dialog.setWindowTitle("Edit Record(s)")
-        edit_dialog.setMinimumWidth(400)
+        edit_dialog.setMinimumWidth(500)
         
         layout = QFormLayout(edit_dialog)
+        
+        # Add a note at the top of the dialog
+        note_label = QLabel("Edit the fields below. Only changed fields will be updated.")
+        note_label.setStyleSheet("color: #666; font-style: italic;")
+        layout.addRow(note_label)
+        
+        # Add a separator
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
+        layout.addRow(line)
         
         # Editable fields
         order_edit = QLineEdit()
@@ -601,6 +685,20 @@ class MainWindow(QMainWindow):
             original_values['SeparatorName'] = separator_name
             original_values['Analysis'] = is_checked
             
+            # Show record ID if available (as read-only)
+            order_item = self.table_model.item(row, 1)
+            record_id = order_item.data(Qt.ItemDataRole.UserRole) if order_item else ""
+            if record_id:
+                id_display = QLineEdit(str(record_id))
+                id_display.setReadOnly(True)
+                id_display.setStyleSheet("background-color: #f0f0f0;")
+                layout.addRow("Record ID:", id_display)
+        else:
+            # If editing multiple rows, show a message
+            multi_edit_label = QLabel(f"Editing {len(rows)} records. Changes will apply to all selected records.")
+            multi_edit_label.setStyleSheet("color: #007bff; font-weight: bold;")
+            layout.addRow(multi_edit_label)
+            
         # Add fields to the form
         layout.addRow("Order Number:", order_edit)
         layout.addRow("Separator Name:", separator_edit)
@@ -612,6 +710,26 @@ class MainWindow(QMainWindow):
         button_box.accepted.connect(edit_dialog.accept)
         button_box.rejected.connect(edit_dialog.reject)
         layout.addRow(button_box)
+        
+        # Set a nicer style for the dialog
+        edit_dialog.setStyleSheet("""
+            QDialog {
+                background-color: white;
+            }
+            QLineEdit, QDateEdit {
+                padding: 5px;
+                border: 1px solid #ccc;
+                border-radius: 3px;
+                min-height: 20px;
+            }
+            QPushButton {
+                min-height: 25px;
+                padding: 5px 15px;
+            }
+            QCheckBox {
+                margin-left: 5px;
+            }
+        """)
         
         # Execute the dialog
         result = edit_dialog.exec()
@@ -813,4 +931,32 @@ class MainWindow(QMainWindow):
         self.clear_date_filter()
         
         # Then search the database
-        self.search_database() 
+        self.search_database()
+
+    def on_sort_changed(self, column, order):
+        """Handle changes in the sort indicator"""
+        # Skip sorting for the checkbox column
+        if column == 0:
+            # Reset to no sorting
+            self.table_view.horizontalHeader().setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
+            return
+            
+        # Apply the sort
+        self.proxy_model.sort(column, order)
+        
+        # Update status message with the current sort
+        column_names = ["Select", "Order Number", "Separator Name", "Date", "Analysis"]
+        order_text = "ascending" if order == Qt.SortOrder.AscendingOrder else "descending"
+        if 0 <= column < len(column_names):
+            self.statusBar().showMessage(f"Sorted by {column_names[column]} ({order_text})")
+
+    def handle_double_click(self, index):
+        """Handle double-click on a table cell by opening the edit dialog for that row"""
+        # Get the source index from the proxy model
+        source_idx = self.proxy_model.mapToSource(index)
+        row = source_idx.row()
+        
+        # Check if the row is valid
+        if row >= 0 and row < self.table_model.rowCount():
+            # Open the edit dialog for this row
+            self.open_edit_dialog([row]) 
