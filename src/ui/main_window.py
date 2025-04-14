@@ -1,10 +1,10 @@
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QPushButton, QLabel, QFileDialog, QMessageBox,
     QTableView, QHeaderView, QCheckBox, QDateEdit
 )
-from PyQt6.QtCore import Qt, QDate
-from PyQt6.QtGui import QStandardItemModel, QStandardItem
+from PySide6.QtCore import Qt, QDate
+from PySide6.QtGui import QStandardItemModel, QStandardItem
 
 import pandas as pd
 import os

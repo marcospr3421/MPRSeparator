@@ -31,11 +31,21 @@ A desktop application for managing separator data, importing from CSV/XLSX files
    ```
    pip install -r requirements.txt
    ```
-5. Create a `.env` file from the sample:
+5. Make sure the AzureKeyVault.py file is in the project root directory
+6. Run the setup utility to create your .env file:
    ```
-   copy .env.sample .env
+   python setup_env.py
    ```
-6. Edit the `.env` file with your Azure Key Vault and database settings
+   Follow the prompts to enter your Azure Key Vault and database settings.
+
+## Using AzureKeyVault.py
+
+The application uses the provided AzureKeyVault.py file to securely retrieve credentials from Azure Key Vault. This file contains a function `get_secret(secret_name, key_vault_uri)` that retrieves secrets from your Azure Key Vault.
+
+The setup_env.py script will:
+1. Guide you through the process of creating the .env file
+2. Test the Azure Key Vault connection using your AzureKeyVault.py
+3. Verify database connectivity with the retrieved credentials
 
 ## Setting up Azure Key Vault
 
@@ -44,7 +54,7 @@ A desktop application for managing separator data, importing from CSV/XLSX files
    - `mpr-separator-db-username`: Your database username
    - `mpr-separator-db-password`: Your database password
 3. Ensure your application has access to the Key Vault (using Azure AD authentication)
-4. Update the `.env` file with your Key Vault URL
+4. Use the setup_env.py script to configure your .env file with the Key Vault URL
 
 ## Database Schema
 

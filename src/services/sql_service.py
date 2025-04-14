@@ -4,9 +4,6 @@ import os
 from datetime import datetime
 import logging
 
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
-
 class SQLService:
     def __init__(self):
         self.connection = None
@@ -18,44 +15,18 @@ class SQLService:
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
         self.logger = logging.getLogger(__name__)
-    
-    def get_credentials_from_keyvault(self):
-        """Get database credentials from Azure Key Vault"""
-        try:
-            # Get Key Vault URL from environment variables
-            key_vault_url = os.environ.get("KEY_VAULT_URL")
-            db_username_secret = os.environ.get("DB_USERNAME_SECRET", "mpr-separator-db-username")
-            db_password_secret = os.environ.get("DB_PASSWORD_SECRET", "mpr-separator-db-password")
-            
-            if not key_vault_url:
-                raise ValueError("KEY_VAULT_URL environment variable is not set")
-            
-            # Create a SecretClient using default Azure credentials
-            credential = DefaultAzureCredential()
-            client = SecretClient(vault_url=key_vault_url, credential=credential)
-            
-            # Get the secrets
-            username = client.get_secret(db_username_secret).value
-            password = client.get_secret(db_password_secret).value
-            
-            return username, password
-            
-        except Exception as e:
-            self.logger.error(f"Error getting credentials from Key Vault: {str(e)}")
-            raise
-    
+        
     def connect(self):
-        """Connect to the SQL Server database using Azure Key Vault credentials"""
+        """Connect to the SQL Server database"""
         try:
             # Get database connection details from environment variables
-            server = os.environ.get("DB_SERVER")
-            database = os.environ.get("DB_NAME")
+            server = os.environ.get("DB_SERVER", "")
+            database = os.environ.get("DB_NAME", "")
+            username = os.environ.get("DB_USERNAME", "")
+            password = os.environ.get("DB_PASSWORD", "")
             
             if not server or not database:
                 raise ValueError("Database connection environment variables not set properly")
-            
-            # Get credentials from Azure Key Vault
-            username, password = self.get_credentials_from_keyvault()
             
             # Create connection string
             conn_str = (
@@ -72,9 +43,12 @@ class SQLService:
             self.cursor = self.connection.cursor()
             
             self.logger.info("Connected to SQL Server database successfully")
+            return True
             
         except Exception as e:
             self.logger.error(f"Database connection error: {str(e)}")
+            self.connection = None
+            self.cursor = None
             raise
     
     def disconnect(self):
@@ -98,8 +72,9 @@ class SQLService:
         
         try:
             # Connect to the database
-            if not self.connection:
-                self.connect()
+            if not self.connection or not self.cursor:
+                if not self.connect():
+                    raise ValueError("Failed to establish database connection")
             
             # Get the table name from environment variables, with a default
             table_name = os.environ.get("DB_TABLE", "SeparatorRecords")
@@ -126,13 +101,20 @@ class SQLService:
                 VALUES (?, ?, ?, ?)
                 """
                 
-                # Execute the query
-                self.cursor.execute(insert_query, (order_number, separator_name, date_str, analysis))
-                records_saved += 1
+                # Check if cursor is available before executing
+                if self.cursor:
+                    # Execute the query
+                    self.cursor.execute(insert_query, (order_number, separator_name, date_str, analysis))
+                    records_saved += 1
+                else:
+                    raise ValueError("Database cursor is not available")
             
             # Commit the transaction
-            self.connection.commit()
-            self.logger.info(f"Successfully saved {records_saved} records to database")
+            if self.connection:
+                self.connection.commit()
+                self.logger.info(f"Successfully saved {records_saved} records to database")
+            else:
+                raise ValueError("Database connection is not available")
             
         except Exception as e:
             self.logger.error(f"Error saving data to database: {str(e)}")
@@ -153,8 +135,9 @@ class SQLService:
         """Fetch data from the database with optional filters"""
         try:
             # Connect to the database
-            if not self.connection:
-                self.connect()
+            if not self.connection or not self.cursor:
+                if not self.connect():
+                    raise ValueError("Failed to establish database connection")
             
             # Get the table name from environment variables, with a default
             table_name = os.environ.get("DB_TABLE", "SeparatorRecords")
@@ -189,18 +172,26 @@ class SQLService:
             # Order by date descending
             query += " ORDER BY DateOfSeparation DESC"
             
+            # Check if cursor is available before executing
+            if not self.cursor:
+                raise ValueError("Database cursor is not available")
+                
             # Execute the query
             self.cursor.execute(query, params)
             
             # Fetch all results
             rows = self.cursor.fetchall()
             
+            # Make sure cursor.description is available
+            if not self.cursor.description:
+                return pd.DataFrame(columns=['OrderNumber', 'SeparatorName', 'DateOfSeparation', 'Analysis'])
+            
             # Convert to DataFrame
             columns = [column[0] for column in self.cursor.description]
             df = pd.DataFrame.from_records(rows, columns=columns)
             
             # Convert Analysis from 0/1 to boolean
-            if 'Analysis' in df.columns:
+            if 'Analysis' in df.columns and not df.empty:
                 df['Analysis'] = df['Analysis'].astype(bool)
             
             return df

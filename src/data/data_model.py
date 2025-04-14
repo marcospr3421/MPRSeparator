@@ -62,11 +62,20 @@ class DataModel:
         # Store the original dataframe
         self.original_df = df
         
-        # Initially, filtered is the same as original
-        self.filtered_df = df.copy()
-        
-        # Apply default filters (last 7 days)
-        self.apply_default_filters()
+        # Check if this is a small sample dataset (less than 100 records)
+        # If it's small, show all records. Otherwise, apply default filters
+        if len(df) < 100:
+            # For small datasets, show all records
+            self.filtered_df = df.copy()
+        else:
+            # For large datasets, apply the 7-day filter
+            self.apply_default_filters()
+            
+        # Check if the filtered data is empty after applying date filters
+        # This happens if all data is outside the default date range
+        if self.filtered_df is None or self.filtered_df.empty:
+            # If filtered data is empty, just show all data
+            self.filtered_df = df.copy()
     
     def _str_to_bool(self, value):
         """Convert various string representations to boolean"""

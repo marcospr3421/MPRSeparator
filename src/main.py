@@ -4,16 +4,17 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Add the project root to the path
-sys.path.append(str(Path(__file__).parent.parent))
+project_root = Path(__file__).parent.parent
+sys.path.append(str(project_root))
 
 # Load environment variables
 load_dotenv()
 
-from PyQt6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication
 from src.ui.main_window import MainWindow
 
-def main():
-    """Main entry point for the application"""
+def main() -> None:
+    """Main entry point for the application."""
     app = QApplication(sys.argv)
     app.setStyle('Fusion')  # Set a consistent style
     

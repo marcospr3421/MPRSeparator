@@ -1,14 +1,14 @@
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QPushButton, QLabel, QLineEdit, QDateEdit,
     QCheckBox, QGroupBox
 )
-from PyQt6.QtCore import Qt, QDate, pyqtSignal
+from PySide6.QtCore import Qt, QDate, Signal
 from datetime import datetime, timedelta
 
 class FilterWindow(QDialog):
     # Signal to emit when data is filtered
-    filtered_data_signal = pyqtSignal()
+    filtered_data_signal = Signal()
     
     def __init__(self, data_model):
         super().__init__()
@@ -126,8 +126,8 @@ class FilterWindow(QDialog):
     def apply_filters(self):
         """Apply the current filters to the data"""
         # Get filter values
-        from_date = self.from_date.date().toPyDate()
-        to_date = self.to_date.date().toPyDate()
+        from_date = self.from_date.date().toString('yyyy-MM-dd')
+        to_date = self.to_date.date().toString('yyyy-MM-dd')
         order_number = self.order_number_edit.text().strip()
         separator_name = self.separator_name_edit.text().strip()
         analysis_only = self.analysis_checkbox.isChecked()
