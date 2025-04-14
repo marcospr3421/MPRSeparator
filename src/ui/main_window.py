@@ -225,11 +225,30 @@ class MainWindow(QMainWindow):
                 # Process and validate data
                 self.data_model.set_dataframe(df)
                 
-                # Display data in the table
-                self.display_data()
+                # Automatically save the imported data to the database
+                try:
+                    records_saved = self.sql_service.save_data(df)
+                    self.statusBar().showMessage(f"Imported and saved {records_saved} records to database from {os.path.basename(file_path)}")
+                    
+                    # Refresh the view by performing a search to display what was saved
+                    self.search_database()
+                    
+                    QMessageBox.information(
+                        self, 
+                        "Import Successful", 
+                        f"Successfully imported and saved {records_saved} records to the database."
+                    )
+                    
+                except Exception as e:
+                    QMessageBox.warning(
+                        self, 
+                        "Save Warning", 
+                        f"Data was imported, but could not be saved to database: {str(e)}"
+                    )
+                    # Display data in the table without saving to DB
+                    self.display_data()
+                    self.statusBar().showMessage(f"Imported {len(df)} records from {os.path.basename(file_path)} (not saved to database)")
                 
-                self.statusBar().showMessage(f"Imported {len(df)} records from {os.path.basename(file_path)}")
-            
         except Exception as e:
             QMessageBox.critical(
                 self, 
@@ -542,6 +561,14 @@ class MainWindow(QMainWindow):
         date_edit.setDate(QDate.currentDate())
         analysis_checkbox = QCheckBox()
         
+        # Store original values to compare later
+        original_values = {
+            'OrderNumber': '',
+            'SeparatorName': '',
+            'DateOfSeparation': '',
+            'Analysis': False
+        }
+        
         # If editing a single row, pre-fill the fields
         if len(rows) == 1:
             row = rows[0]
@@ -554,8 +581,11 @@ class MainWindow(QMainWindow):
                 date = QDate.fromString(date_str, "yyyy-MM-dd")
                 if date.isValid():
                     date_edit.setDate(date)
+                    original_values['DateOfSeparation'] = date_str
+                else:
+                    original_values['DateOfSeparation'] = ""
             except Exception:
-                pass
+                original_values['DateOfSeparation'] = ""
                 
             # Analysis checkbox
             analysis_item = self.table_model.item(row, 4)  # Analysis (column 4)
@@ -565,6 +595,11 @@ class MainWindow(QMainWindow):
             # Set the text fields
             order_edit.setText(order_number)
             separator_edit.setText(separator_name)
+            
+            # Store original values
+            original_values['OrderNumber'] = order_number
+            original_values['SeparatorName'] = separator_name
+            original_values['Analysis'] = is_checked
             
         # Add fields to the form
         layout.addRow("Order Number:", order_edit)
@@ -582,15 +617,35 @@ class MainWindow(QMainWindow):
         result = edit_dialog.exec()
         
         if result == QDialog.DialogCode.Accepted:
-            # Apply the changes to the selected rows
-            updated_data = {
-                'OrderNumber': order_edit.text(),
-                'SeparatorName': separator_edit.text(),
-                'DateOfSeparation': date_edit.date().toString("yyyy-MM-dd"),
-                'Analysis': analysis_checkbox.isChecked()
-            }
+            # Track only the fields that were changed
+            updated_data = {}
             
-            self.update_records(rows, updated_data)
+            # Check what has changed and add only those fields
+            new_order = order_edit.text()
+            if new_order != original_values['OrderNumber']:
+                updated_data['OrderNumber'] = new_order
+                
+            new_separator = separator_edit.text()
+            if new_separator != original_values['SeparatorName']:
+                updated_data['SeparatorName'] = new_separator
+                
+            new_date = date_edit.date().toString("yyyy-MM-dd")
+            if new_date != original_values['DateOfSeparation']:
+                updated_data['DateOfSeparation'] = new_date
+                
+            new_analysis = analysis_checkbox.isChecked()
+            if new_analysis != original_values['Analysis']:
+                updated_data['Analysis'] = new_analysis
+            
+            # Apply changes only if there are actual changes
+            if updated_data:
+                self.update_records(rows, updated_data)
+            else:
+                QMessageBox.information(
+                    self,
+                    "No Changes",
+                    "No changes were made to the record(s)."
+                )
     
     def update_records(self, rows, data):
         """Update records with new data
@@ -630,7 +685,7 @@ class MainWindow(QMainWindow):
                 if not row_filter.any():
                     continue
                     
-                # Update the DataFrame with new data
+                # Update the DataFrame with new data (only changed fields)
                 for key, value in data.items():
                     if key in df.columns:
                         df.loc[row_filter, key] = value
@@ -644,7 +699,7 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     self.statusBar().showMessage(f"Error updating database: {str(e)}")
             
-            # Update the table view
+            # Update the table view (only changed fields)
             for key, value in data.items():
                 if key == 'OrderNumber':
                     self.table_model.item(row, 1).setText(value)
