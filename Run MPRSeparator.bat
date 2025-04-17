@@ -1,0 +1,3 @@
+@echo off
+echo Starting MPRSeparator...
+start "" "dist\MPRSeparator.exe" 
