@@ -2,17 +2,19 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QPushButton, QLabel, QFileDialog, QMessageBox,
     QTableView, QHeaderView, QCheckBox, QDateEdit, QDialog, QFormLayout, QLineEdit, QDialogButtonBox,
-    QGroupBox, QFrame
+    QGroupBox, QFrame, QMenu, QToolBar, QComboBox
 )
-from PySide6.QtCore import Qt, QDate, QSortFilterProxyModel, QModelIndex
+from PySide6.QtCore import Qt, QDate, QSortFilterProxyModel, QModelIndex, QTranslator, QCoreApplication
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QIcon, QPixmap, QBrush, QColor
 
 import pandas as pd
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from src.data.data_model import DataModel
 from src.services.sql_service import SQLService
+from src.services.translator import LanguageManager
 
 class SortableTableModel(QStandardItemModel):
     """Custom model that handles sorting properly for different data types"""
@@ -39,14 +41,22 @@ class SortableTableModel(QStandardItemModel):
         super().sort(column, order)
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, language_manager=None):
         super().__init__()
         
         self.data_model = DataModel()
         self.sql_service = SQLService()
         
+        # Initialize language manager
+        if language_manager:
+            self.language_manager = language_manager
+        else:
+            self.language_manager = LanguageManager()
+            
+        self.language_manager.language_changed.connect(self.retranslate_ui)
+        
         # Setup the UI
-        self.setWindowTitle("MPR Separator")
+        self.setWindowTitle(self.tr("MPR Separator"))
         self.setMinimumSize(1000, 700)
         
         # Create central widget and layout
@@ -54,6 +64,9 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.central_widget)
         
         self.main_layout = QVBoxLayout(self.central_widget)
+        
+        # Create toolbar with language selector
+        self.setup_toolbar()
         
         # Create the import section
         self.setup_import_section()
@@ -68,14 +81,148 @@ class MainWindow(QMainWindow):
         self.setup_action_buttons()
         
         # Show status message
-        self.statusBar().showMessage("Ready")
+        self.statusBar().showMessage(self.tr("Ready"))
+    
+    def setup_toolbar(self):
+        """Create the toolbar with language selector"""
+        toolbar = QToolBar(self)
+        self.addToolBar(toolbar)
+        
+        # Add language label
+        language_label = QLabel(self.tr("Language") + ": ")
+        language_label.setObjectName("language_label")
+        toolbar.addWidget(language_label)
+        
+        # Add language selector
+        self.language_selector = QComboBox()
+        
+        # Populate language selector
+        available_languages = self.language_manager.get_available_languages()
+        for code, name in available_languages.items():
+            self.language_selector.addItem(name, code)
+            
+        # Set current language
+        current_lang = self.language_manager.get_current_language()
+        for i in range(self.language_selector.count()):
+            if self.language_selector.itemData(i) == current_lang:
+                self.language_selector.setCurrentIndex(i)
+                break
+        
+        # Connect language change signal
+        self.language_selector.currentIndexChanged.connect(self.on_language_changed)
+        
+        toolbar.addWidget(self.language_selector)
+        toolbar.addSeparator()
+    
+    def on_language_changed(self, index):
+        """Handle language change from dropdown"""
+        if index < 0:
+            return
+            
+        language_code = self.language_selector.itemData(index)
+        current_language = self.language_manager.get_current_language()
+        
+        print(f"Language selected: {language_code}, Current language: {current_language}")
+        
+        if language_code != current_language:
+            print(f"Changing language from {current_language} to {language_code}")
+            success = self.language_manager.change_language(language_code)
+            print(f"Language change result: {'Success' if success else 'Failed'}")
+            
+            # Debug translation file existence
+            translation_file = Path(self.language_manager.translations_dir) / f"mpr_separator_{language_code}.qm"
+            print(f"Translation file path: {translation_file}")
+            print(f"Translation file exists: {translation_file.exists()}")
+            print(f"Translation file size: {translation_file.stat().st_size if translation_file.exists() else 'N/A'}")
+        else:
+            print("No language change needed (same language)")
+    
+    def retranslate_ui(self, language_code=None):
+        """Update all UI text with new translations"""
+        print(f"Retranslating UI for language: {language_code if language_code else 'default'}")
+        
+        # Window title
+        new_title = self.tr("MPR Separator")
+        self.setWindowTitle(new_title)
+        print(f"Window title translated to: {new_title}")
+        
+        # Update toolbar (if language_label exists)
+        language_label = self.findChild(QLabel, "language_label")
+        if language_label:
+            language_label.setText(self.tr("Language") + ": ")
+        
+        # Update import section
+        import_label = self.findChild(QLabel, "import_label")
+        if import_label:
+            import_label.setText(self.tr("Data Sources:"))
+        self.import_button.setText(self.tr("Import File..."))
+        
+        # Update filter section
+        filter_group = self.findChild(QGroupBox, "filter_group")
+        if filter_group:
+            filter_group.setTitle(self.tr("Search & Filter Database"))
+            
+        date_label = self.findChild(QLabel, "date_label")
+        if date_label:
+            date_label.setText(self.tr("Date Range:"))
+            
+        date_to_label = self.findChild(QLabel, "date_to_label")
+        if date_to_label:
+            date_to_label.setText(self.tr("to"))
+            
+        self.today_button.setText(self.tr("Today"))
+        self.week_button.setText(self.tr("Last 7 Days"))
+        self.month_button.setText(self.tr("Last 30 Days"))
+        self.all_button.setText(self.tr("All Dates"))
+        
+        order_label = self.findChild(QLabel, "order_label")
+        if order_label:
+            order_label.setText(self.tr("Order:"))
+        self.order_edit.setPlaceholderText(self.tr("Filter by order number"))
+        
+        name_label = self.findChild(QLabel, "name_label")
+        if name_label:
+            name_label.setText(self.tr("Separator:"))
+        self.name_edit.setPlaceholderText(self.tr("Filter by separator name"))
+        
+        id_label = self.findChild(QLabel, "id_label")
+        if id_label:
+            id_label.setText(self.tr("ID:"))
+        self.id_edit.setPlaceholderText(self.tr("Find by record ID"))
+        self.analysis_checkbox.setText(self.tr("Analysis Only"))
+        
+        self.search_button.setText(self.tr("Search Database"))
+        self.all_records_button.setText(self.tr("All Records"))
+        self.reset_button.setText(self.tr("Reset"))
+        
+        # Update table headers
+        self.table_model.setHorizontalHeaderLabels([
+            self.tr("Select"), 
+            self.tr("Order Number"), 
+            self.tr("Separator Name"), 
+            self.tr("Date of Separation"), 
+            self.tr("Analysis")
+        ])
+        
+        # Update action buttons
+        self.select_all_checkbox.setText(self.tr("Select All"))
+        self.edit_selected_button.setText(self.tr("Edit Selected"))
+        self.delete_selected_button.setText(self.tr("Delete Selected"))
+        
+        # Update status bar if it has message
+        current_status = self.statusBar().currentMessage()
+        if current_status:
+            if "Ready" in current_status:
+                self.statusBar().showMessage(self.tr("Ready"))
+            # Other status messages could be added here if needed
     
     def setup_import_section(self):
         """Create the file import section"""
         import_layout = QHBoxLayout()
         
-        import_label = QLabel("Data Sources:")
-        self.import_button = QPushButton("Import File...")
+        import_label = QLabel(self.tr("Data Sources:"))
+        import_label.setObjectName("import_label")
+        self.import_button = QPushButton(self.tr("Import File..."))
         self.import_button.clicked.connect(self.import_file)
         
         import_layout.addWidget(import_label)
@@ -86,34 +233,37 @@ class MainWindow(QMainWindow):
     
     def setup_filter_section(self):
         """Create centralized filter controls"""
-        filter_group = QGroupBox("Search & Filter Database")
+        filter_group = QGroupBox(self.tr("Search & Filter Database"))
+        filter_group.setObjectName("filter_group")
         filter_layout = QVBoxLayout(filter_group)
         
         # Date filters
         date_layout = QHBoxLayout()
-        date_label = QLabel("Date Range:")
+        date_label = QLabel(self.tr("Date Range:"))
+        date_label.setObjectName("date_label")
         
         self.from_date = QDateEdit()
         self.from_date.setCalendarPopup(True)
         self.from_date.setDate(QDate.currentDate().addDays(-7))
         
-        date_to_label = QLabel("to")
+        date_to_label = QLabel(self.tr("to"))
+        date_to_label.setObjectName("date_to_label")
         
         self.to_date = QDateEdit()
         self.to_date.setCalendarPopup(True)
         self.to_date.setDate(QDate.currentDate())
         
         # Quick date buttons
-        self.today_button = QPushButton("Today")
+        self.today_button = QPushButton(self.tr("Today"))
         self.today_button.clicked.connect(self.set_today_filter)
         
-        self.week_button = QPushButton("Last 7 Days")
+        self.week_button = QPushButton(self.tr("Last 7 Days"))
         self.week_button.clicked.connect(self.set_week_filter)
         
-        self.month_button = QPushButton("Last 30 Days")
+        self.month_button = QPushButton(self.tr("Last 30 Days"))
         self.month_button.clicked.connect(self.set_month_filter)
         
-        self.all_button = QPushButton("All Dates")
+        self.all_button = QPushButton(self.tr("All Dates"))
         self.all_button.clicked.connect(self.clear_date_filter)
         
         date_layout.addWidget(date_label)
@@ -130,22 +280,25 @@ class MainWindow(QMainWindow):
         text_layout = QHBoxLayout()
         
         # Order number filter
-        order_label = QLabel("Order:")
+        order_label = QLabel(self.tr("Order:"))
+        order_label.setObjectName("order_label")
         self.order_edit = QLineEdit()
-        self.order_edit.setPlaceholderText("Filter by order number")
+        self.order_edit.setPlaceholderText(self.tr("Filter by order number"))
         
         # Separator name filter
-        name_label = QLabel("Separator:")
+        name_label = QLabel(self.tr("Separator:"))
+        name_label.setObjectName("name_label")
         self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("Filter by separator name")
+        self.name_edit.setPlaceholderText(self.tr("Filter by separator name"))
         
         # ID filter
-        id_label = QLabel("ID:")
+        id_label = QLabel(self.tr("ID:"))
+        id_label.setObjectName("id_label")
         self.id_edit = QLineEdit()
-        self.id_edit.setPlaceholderText("Find by record ID")
+        self.id_edit.setPlaceholderText(self.tr("Find by record ID"))
         
         # Analysis filter
-        self.analysis_checkbox = QCheckBox("Analysis Only")
+        self.analysis_checkbox = QCheckBox(self.tr("Analysis Only"))
         
         text_layout.addWidget(order_label)
         text_layout.addWidget(self.order_edit)
@@ -159,15 +312,15 @@ class MainWindow(QMainWindow):
         button_layout = QHBoxLayout()
         
         # Search button
-        self.search_button = QPushButton("Search Database")
+        self.search_button = QPushButton(self.tr("Search Database"))
         self.search_button.clicked.connect(self.search_database)
         
         # All Records button
-        self.all_records_button = QPushButton("All Records")
+        self.all_records_button = QPushButton(self.tr("All Records"))
         self.all_records_button.clicked.connect(self.search_all_records)
         
         # Reset button 
-        self.reset_button = QPushButton("Reset")
+        self.reset_button = QPushButton(self.tr("Reset"))
         self.reset_button.clicked.connect(self.reset_filters_and_results)
         
         button_layout.addWidget(self.search_button)
@@ -196,7 +349,11 @@ class MainWindow(QMainWindow):
         
         # Set headers for the table
         self.table_model.setHorizontalHeaderLabels([
-            "Select", "Order Number", "Separator Name", "Date of Separation", "Analysis"
+            self.tr("Select"), 
+            self.tr("Order Number"), 
+            self.tr("Separator Name"), 
+            self.tr("Date of Separation"), 
+            self.tr("Analysis")
         ])
         
         # Set the proxy model to the view
@@ -234,14 +391,14 @@ class MainWindow(QMainWindow):
         
         # Selection controls
         selection_layout = QHBoxLayout()
-        self.select_all_checkbox = QCheckBox("Select All")
+        self.select_all_checkbox = QCheckBox(self.tr("Select All"))
         self.select_all_checkbox.toggled.connect(self.toggle_select_all)
         
         # Selected items actions
-        self.edit_selected_button = QPushButton("Edit Selected")
+        self.edit_selected_button = QPushButton(self.tr("Edit Selected"))
         self.edit_selected_button.clicked.connect(self.edit_selected_records)
         
-        self.delete_selected_button = QPushButton("Delete Selected")
+        self.delete_selected_button = QPushButton(self.tr("Delete Selected"))
         self.delete_selected_button.clicked.connect(self.delete_selected_records)
         
         # Add widgets to layouts
@@ -258,9 +415,9 @@ class MainWindow(QMainWindow):
         """Import data from CSV or XLSX file"""
         file_path, _ = QFileDialog.getOpenFileName(
             self, 
-            "Select Data File", 
+            self.tr("Select Data File"), 
             "", 
-            "Data Files (*.csv *.xlsx);;All Files (*)"
+            self.tr("Data Files (*.csv *.xlsx);;All Files (*)")
         )
         
         if not file_path:
@@ -283,32 +440,32 @@ class MainWindow(QMainWindow):
                 # Automatically save the imported data to the database
                 try:
                     records_saved = self.sql_service.save_data(df)
-                    self.statusBar().showMessage(f"Imported and saved {records_saved} records to database from {os.path.basename(file_path)}")
+                    self.statusBar().showMessage(f"{self.tr('Imported and saved')} {records_saved} {self.tr('records to database from')} {os.path.basename(file_path)}")
                     
                     # Refresh the view by performing a search to display what was saved
                     self.search_database()
                     
                     QMessageBox.information(
                         self, 
-                        "Import Successful", 
-                        f"Successfully imported and saved {records_saved} records to the database."
+                        self.tr("Import Successful"), 
+                        f"{self.tr('Successfully imported and saved')} {records_saved} {self.tr('records to the database.')}",
                     )
                     
                 except Exception as e:
                     QMessageBox.warning(
                         self, 
-                        "Save Warning", 
-                        f"Data was imported, but could not be saved to database: {str(e)}"
+                        self.tr("Save Warning"), 
+                        f"{self.tr('Data was imported, but could not be saved to database:')} {str(e)}"
                     )
                     # Display data in the table without saving to DB
                     self.display_data()
-                    self.statusBar().showMessage(f"Imported {len(df)} records from {os.path.basename(file_path)} (not saved to database)")
+                    self.statusBar().showMessage(f"{self.tr('Imported')} {len(df)} {self.tr('records from')} {os.path.basename(file_path)} {self.tr('(not saved to database)')}")
                 
         except Exception as e:
             QMessageBox.critical(
                 self, 
-                "Import Error", 
-                f"Failed to import data: {str(e)}"
+                self.tr("Import Error"), 
+                f"{self.tr('Failed to import data:')} {str(e)}"
             )
     
     def show_import_preview(self, df, filename):
@@ -945,10 +1102,16 @@ class MainWindow(QMainWindow):
         self.proxy_model.sort(column, order)
         
         # Update status message with the current sort
-        column_names = ["Select", "Order Number", "Separator Name", "Date", "Analysis"]
-        order_text = "ascending" if order == Qt.SortOrder.AscendingOrder else "descending"
+        column_names = [
+            self.tr("Select"), 
+            self.tr("Order Number"), 
+            self.tr("Separator Name"), 
+            self.tr("Date"), 
+            self.tr("Analysis")
+        ]
+        order_text = self.tr("ascending") if order == Qt.SortOrder.AscendingOrder else self.tr("descending")
         if 0 <= column < len(column_names):
-            self.statusBar().showMessage(f"Sorted by {column_names[column]} ({order_text})")
+            self.statusBar().showMessage(f"{self.tr('Sorted by')} {column_names[column]} ({order_text})")
 
     def handle_double_click(self, index):
         """Handle double-click on a table cell by opening the edit dialog for that row"""
@@ -959,4 +1122,18 @@ class MainWindow(QMainWindow):
         # Check if the row is valid
         if row >= 0 and row < self.table_model.rowCount():
             # Open the edit dialog for this row
-            self.open_edit_dialog([row]) 
+            self.open_edit_dialog([row])
+
+    def tr(self, text):
+        """Override the tr method to use our language manager's translation as fallback
+        
+        This ensures translations work even if the QM file isn't properly loaded
+        """
+        # Try Qt's translation system first
+        qt_translation = super().tr(text)
+        
+        # If Qt didn't translate (returns the same text), use our fallback
+        if qt_translation == text and hasattr(self, 'language_manager'):
+            return self.language_manager.translate(text)
+        
+        return qt_translation 

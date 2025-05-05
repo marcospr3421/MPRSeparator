@@ -9,6 +9,41 @@ A desktop application for managing separator data, importing from CSV/XLSX files
 - Default filter to show only last 7 days of data for faster loading
 - Save data to Microsoft SQL Server
 - Secure database authentication using Azure Key Vault
+- Multilingual interface (English, Portuguese-BR)
+
+## Language Support
+
+The application supports the following languages:
+- English (default)
+- Portuguese (Brazil)
+
+You can switch languages using the language selector in the toolbar at the top of the application.
+
+## Development
+
+### Translation System
+
+The application uses the Qt translation system to support multiple languages. To update or add new translations:
+
+1. Run the translation update tool:
+   ```
+   python tools/create_translations.py
+   ```
+
+2. Edit the .ts files in the `translations` directory using Qt Linguist.
+
+3. Run the update tool again to compile the translations.
+
+See `translations/README.md` for more detailed information about managing translations.
+
+### Project Structure
+
+- `src/` - Source code
+  - `data/` - Data models
+  - `services/` - Business logic services
+  - `ui/` - User interface components
+- `translations/` - Translation files
+- `tools/` - Development tools
 
 ## Requirements
 
@@ -16,6 +51,9 @@ A desktop application for managing separator data, importing from CSV/XLSX files
 - Microsoft ODBC Driver 17 for SQL Server
 - Azure account with Key Vault configured
 - SQL Server database
+- PySide6
+- pandas
+- dotenv
 
 ## Installation
 
