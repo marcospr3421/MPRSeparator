@@ -190,19 +190,21 @@ class MainWindow(QMainWindow):
         if filter_group:
             filter_group.setTitle(self.tr("Search & Filter Database"))
             
-        date_label = self.findChild(QLabel, "date_label")
-        if date_label:
-            date_label.setText(self.tr("Date Range:"))
+        # Remove all translation settings for date controls and buttons
+        # date_label = self.findChild(QLabel, "date_label")
+        # if date_label:
+        #     date_label.setText(self.tr("Date Range:"))
             
-        date_to_label = self.findChild(QLabel, "date_to_label")
-        if date_to_label:
-            date_to_label.setText(self.tr("to"))
+        # date_to_label = self.findChild(QLabel, "date_to_label")
+        # if date_to_label:
+        #     date_to_label.setText(self.tr("to"))
             
-        self.today_button.setText(self.tr("Today"))
-        self.week_button.setText(self.tr("Last 7 Days"))
-        self.month_button.setText(self.tr("Last 30 Days"))
-        self.all_button.setText(self.tr("All Dates"))
+        # self.today_button.setText(self.tr("Today"))
+        # self.week_button.setText(self.tr("Last 7 Days"))
+        # self.month_button.setText(self.tr("Last 30 Days"))
+        # self.all_button.setText(self.tr("All Dates"))
         
+        # Keep the remaining translations
         order_label = self.findChild(QLabel, "order_label")
         if order_label:
             order_label.setText(self.tr("Order:"))
@@ -220,7 +222,7 @@ class MainWindow(QMainWindow):
         self.analysis_checkbox.setText(self.tr("Analysis Only"))
         
         self.search_button.setText(self.tr("Search Database"))
-        self.all_records_button.setText(self.tr("All Records"))
+        # self.all_records_button.setText(self.tr("All Records"))  # Remove this line
         self.reset_button.setText(self.tr("Reset"))
         
         # Update table headers
@@ -235,9 +237,7 @@ class MainWindow(QMainWindow):
         # Update action buttons
         self.select_all_checkbox.setText(self.tr("Select All"))
         self.edit_selected_button.setText(self.tr("Edit Selected"))
-        # Check if all_records_button exists before setting text
-        if hasattr(self, 'all_records_button'):
-            self.all_records_button.setText(self.tr("All Records"))
+        # The all_records_button was removed from the UI
         # The delete_selected_button is commented out in setup_action_buttons,
         # so we don't need to check for it here
         
@@ -269,46 +269,13 @@ class MainWindow(QMainWindow):
         filter_group.setObjectName("filter_group")
         filter_layout = QVBoxLayout(filter_group)
         
-        # Date filters
-        date_layout = QHBoxLayout()
-        date_label = QLabel(self.tr("Date Range:"))
-        date_label.setObjectName("date_label")
+        # Remove all date-related controls and buttons
+        # date_layout = QHBoxLayout()
+        # date_label = QLabel(self.tr("Date Range:"))
+        # date_label.setObjectName("date_label")
+        # ... [all date controls and buttons removed] ...
         
-        self.from_date = QDateEdit()
-        self.from_date.setCalendarPopup(True)
-        self.from_date.setDate(QDate.currentDate().addDays(-7))
-        
-        date_to_label = QLabel(self.tr("to"))
-        date_to_label.setObjectName("date_to_label")
-        
-        self.to_date = QDateEdit()
-        self.to_date.setCalendarPopup(True)
-        self.to_date.setDate(QDate.currentDate())
-        
-        # Quick date buttons
-        self.today_button = QPushButton(self.tr("Today"))
-        self.today_button.clicked.connect(self.set_today_filter)
-        
-        self.week_button = QPushButton(self.tr("Last 7 Days"))
-        self.week_button.clicked.connect(self.set_week_filter)
-        
-        self.month_button = QPushButton(self.tr("Last 30 Days"))
-        self.month_button.clicked.connect(self.set_month_filter)
-        
-        self.all_button = QPushButton(self.tr("All Dates"))
-        self.all_button.clicked.connect(self.clear_date_filter)
-        
-        date_layout.addWidget(date_label)
-        date_layout.addWidget(self.from_date)
-        date_layout.addWidget(date_to_label)
-        date_layout.addWidget(self.to_date)
-        date_layout.addWidget(self.today_button)
-        date_layout.addWidget(self.week_button)
-        date_layout.addWidget(self.month_button)
-        date_layout.addWidget(self.all_button)
-        date_layout.addStretch()
-        
-        # Text filters
+        # Text filters - keep these
         text_layout = QHBoxLayout()
         
         # Order number filter
@@ -316,18 +283,21 @@ class MainWindow(QMainWindow):
         order_label.setObjectName("order_label")
         self.order_edit = QLineEdit()
         self.order_edit.setPlaceholderText(self.tr("Filter by order number"))
+        self.order_edit.returnPressed.connect(self.search_database)
         
         # Separator name filter
         name_label = QLabel(self.tr("Separator:"))
         name_label.setObjectName("name_label")
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText(self.tr("Filter by separator name"))
+        self.name_edit.returnPressed.connect(self.search_database)
         
         # ID filter
         id_label = QLabel(self.tr("ID:"))
         id_label.setObjectName("id_label")
         self.id_edit = QLineEdit()
         self.id_edit.setPlaceholderText(self.tr("Find by record ID"))
+        self.id_edit.returnPressed.connect(self.search_database)
         
         # Analysis filter
         self.analysis_checkbox = QCheckBox(self.tr("Analysis Only"))
@@ -340,22 +310,21 @@ class MainWindow(QMainWindow):
         text_layout.addWidget(self.id_edit)
         text_layout.addWidget(self.analysis_checkbox)
         
-        # Button layout
+        # Button layout - keep just the reset button
         button_layout = QHBoxLayout()
         
-        # Define All Records button but don't add it to the layout
-        self.all_records_button = QPushButton(self.tr("All Records"))
-        self.all_records_button.clicked.connect(self.search_all_records)
-        # button_layout.addWidget(self.all_records_button)  # Not adding to layout
+        # Remove "All Records" button
+        # self.all_records_button = QPushButton(self.tr("All Records"))
+        # self.all_records_button.clicked.connect(self.search_all_records)
+        # button_layout.addWidget(self.all_records_button)
         
-        # Create the reset button here but don't add it to this layout
+        # Reset button 
         self.reset_button = QPushButton(self.tr("Reset"))
         self.reset_button.clicked.connect(self.reset_filters_and_results)
         
-        # Don't add reset button here anymore
-        # button_layout.addWidget(self.reset_button)
+        button_layout.addWidget(self.reset_button)
         
-        filter_layout.addLayout(date_layout)
+        # Add layouts to the filter group
         filter_layout.addLayout(text_layout)
         filter_layout.addLayout(button_layout)
         
@@ -367,9 +336,7 @@ class MainWindow(QMainWindow):
         self.name_edit.returnPressed.connect(self.search_database)
         self.id_edit.returnPressed.connect(self.search_database)
         
-        # Install event filter for date fields
-        self.from_date.installEventFilter(self)
-        self.to_date.installEventFilter(self)
+        # Date fields have been removed, so no need to install event filters for them
     
     def setup_data_table(self):
         """Create the data table view"""
@@ -674,49 +641,41 @@ class MainWindow(QMainWindow):
         self.table_view.horizontalHeader().setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
     
     def set_today_filter(self):
-        """Set date filter to today only"""
-        today = QDate.currentDate()
-        self.from_date.setDate(today)
-        self.to_date.setDate(today)
+        """Set date filter to today only - DEPRECATED"""
+        # This method is kept for backwards compatibility
+        # Date controls have been removed from the UI
+        pass
     
     def set_week_filter(self):
-        """Set date filter to last 7 days"""
-        today = QDate.currentDate()
-        week_ago = today.addDays(-7)
-        self.from_date.setDate(week_ago)
-        self.to_date.setDate(today)
+        """Set date filter to last 7 days - DEPRECATED"""
+        # This method is kept for backwards compatibility
+        # Date controls have been removed from the UI
+        pass
     
     def set_month_filter(self):
-        """Set date filter to last 30 days"""
-        today = QDate.currentDate()
-        month_ago = today.addDays(-30)
-        self.from_date.setDate(month_ago)
-        self.to_date.setDate(today)
+        """Set date filter to last 30 days - DEPRECATED"""
+        # This method is kept for backwards compatibility
+        # Date controls have been removed from the UI
+        pass
     
     def clear_date_filter(self, and_search=False):
-        """Clear date filter (set to all dates)"""
-        self.from_date.setDate(QDate(2000, 1, 1))
-        self.to_date.setDate(QDate.currentDate())
+        """Clear date filter (set to all dates) - DEPRECATED"""
+        # This method is kept for backwards compatibility
+        # Date controls have been removed from the UI
+        
+        # Clear text filters too
+        self.order_edit.clear()
+        self.name_edit.clear()
         
         if and_search:
             self.search_database()
-    
     def reset_filters(self):
         """Reset all filters to default"""
-        self.set_week_filter()
+        # Reset text filters
         self.order_edit.clear()
         self.name_edit.clear()
         self.id_edit.clear()
         self.analysis_checkbox.setChecked(False)
-    
-    def toggle_select_all(self, checked):
-        """Toggle selection of all rows"""
-        for row in range(self.table_model.rowCount()):
-            select_item = self.table_model.item(row, 0)
-            if select_item:
-                select_item.setCheckState(
-                    Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
-                )
     
     def get_selected_rows(self):
         """Get a list of row indices that are currently selected"""
@@ -1070,54 +1029,40 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Filters and results cleared")
         
     def search_database(self):
-        """Search the database using the current filter settings"""
+        """Search the database with filters"""
         try:
             # Get filter values
-            from_date = self.from_date.date().toString('yyyy-MM-dd')
-            to_date = self.to_date.date().toString('yyyy-MM-dd')
             order_number = self.order_edit.text().strip()
             separator_name = self.name_edit.text().strip()
             record_id = self.id_edit.text().strip()
             analysis_only = self.analysis_checkbox.isChecked()
             
-            # Fetch data directly from database with filters
-            df = self.sql_service.fetch_data(
-                from_date=from_date,
-                to_date=to_date,
+            # Show loading indicator
+            self.statusBar().showMessage(self.tr("Searching database..."))
+            
+            # Perform search without date filters
+            result_df = self.sql_service.fetch_data(
+                from_date=None,  # No date filter
+                to_date=None,    # No date filter
                 order_number=order_number,
                 separator_name=separator_name,
                 analysis_only=analysis_only
             )
             
-            # If record ID is specified, filter manually since SQL service doesn't have direct ID filtering
-            if record_id and 'Id' in df.columns and not df.empty:
-                df = df[df['Id'].astype(str) == record_id]
-            
-            if df is None or df.empty:
-                QMessageBox.warning(
-                    self, 
-                    "No Results", 
-                    "No records found matching your search criteria."
-                )
-                # Clear the table when no results found
-                self.table_model.setRowCount(0)
-                self.statusBar().showMessage("No records found matching search criteria")
-                return
-            
-            # Update the data model with search results
-            self.data_model.set_dataframe(df)
-            
-            # Display data in the table
+            # Update the data model and display the results
+            self.data_model.set_dataframe(result_df)
             self.display_data()
             
-            # Update status message
-            self.statusBar().showMessage(f"Found {len(df)} records matching search criteria")
+            # Update status bar
+            count = len(result_df) if result_df is not None else 0
+            self.statusBar().showMessage(self.tr(f"Found {count} records"))
             
         except Exception as e:
+            self.statusBar().showMessage(self.tr("Error searching database"))
             QMessageBox.critical(
-                self, 
-                "Search Error", 
-                f"Failed to search database: {str(e)}"
+                self,
+                self.tr("Search Error"),
+                str(e)
             )
 
     def search_all_records(self):
@@ -1180,14 +1125,26 @@ class MainWindow(QMainWindow):
         
         return qt_translation
 
+    def toggle_select_all(self, checked):
+        """Toggle selection of all rows in the table"""
+        for row in range(self.table_model.rowCount()):
+            select_item = self.table_model.item(row, 0)
+            if select_item:
+                select_item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+        
+        # Update status message
+        if checked:
+            self.statusBar().showMessage(self.tr(f"Selected all {self.table_model.rowCount()} records"))
+        else:
+            self.statusBar().showMessage(self.tr("Cleared all selections"))
+    
     def eventFilter(self, obj, event):
         """Handle events for filtered objects"""
         if event.type() == event.Type.KeyPress:
             if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
-                # If Enter/Return is pressed in a date field, trigger search
-                if obj in [self.from_date, self.to_date]:
-                    self.search_database()
-                    return True
+                # If Enter/Return is pressed in a monitored field, trigger search
+                self.search_database()
+                return True
     
         # Pass other events to the parent class
         return super().eventFilter(obj, event)
