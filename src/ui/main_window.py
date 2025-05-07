@@ -215,10 +215,12 @@ class MainWindow(QMainWindow):
             name_label.setText(self.tr("Separator:"))
         self.name_edit.setPlaceholderText(self.tr("Filter by separator name"))
         
-        id_label = self.findChild(QLabel, "id_label")
-        if id_label:
-            id_label.setText(self.tr("ID:"))
-        self.id_edit.setPlaceholderText(self.tr("Find by record ID"))
+        # Remove ID label translation
+        # id_label = self.findChild(QLabel, "id_label")
+        # if id_label:
+        #     id_label.setText(self.tr("ID:"))
+        # self.id_edit.setPlaceholderText(self.tr("Find by record ID"))
+        
         self.analysis_checkbox.setText(self.tr("Analysis Only"))
         
         self.search_button.setText(self.tr("Search Database"))
@@ -269,13 +271,7 @@ class MainWindow(QMainWindow):
         filter_group.setObjectName("filter_group")
         filter_layout = QVBoxLayout(filter_group)
         
-        # Remove all date-related controls and buttons
-        # date_layout = QHBoxLayout()
-        # date_label = QLabel(self.tr("Date Range:"))
-        # date_label.setObjectName("date_label")
-        # ... [all date controls and buttons removed] ...
-        
-        # Text filters - keep these
+        # Text filters
         text_layout = QHBoxLayout()
         
         # Order number filter
@@ -292,12 +288,12 @@ class MainWindow(QMainWindow):
         self.name_edit.setPlaceholderText(self.tr("Filter by separator name"))
         self.name_edit.returnPressed.connect(self.search_database)
         
-        # ID filter
-        id_label = QLabel(self.tr("ID:"))
-        id_label.setObjectName("id_label")
-        self.id_edit = QLineEdit()
-        self.id_edit.setPlaceholderText(self.tr("Find by record ID"))
-        self.id_edit.returnPressed.connect(self.search_database)
+        # Remove ID filter
+        # id_label = QLabel(self.tr("ID:"))
+        # id_label.setObjectName("id_label")
+        # self.id_edit = QLineEdit()
+        # self.id_edit.setPlaceholderText(self.tr("Find by record ID"))
+        # self.id_edit.returnPressed.connect(self.search_database)
         
         # Analysis filter
         self.analysis_checkbox = QCheckBox(self.tr("Analysis Only"))
@@ -306,8 +302,8 @@ class MainWindow(QMainWindow):
         text_layout.addWidget(self.order_edit)
         text_layout.addWidget(name_label)
         text_layout.addWidget(self.name_edit)
-        text_layout.addWidget(id_label)
-        text_layout.addWidget(self.id_edit)
+        # text_layout.addWidget(id_label)  # Remove ID label
+        # text_layout.addWidget(self.id_edit)  # Remove ID edit field
         text_layout.addWidget(self.analysis_checkbox)
         
         # Button layout - keep just the reset button
@@ -334,7 +330,7 @@ class MainWindow(QMainWindow):
         # Connect Enter/Return key presses to trigger search
         self.order_edit.returnPressed.connect(self.search_database)
         self.name_edit.returnPressed.connect(self.search_database)
-        self.id_edit.returnPressed.connect(self.search_database)
+        # id_edit was removed from the UI
         
         # Date fields have been removed, so no need to install event filters for them
     
@@ -674,7 +670,7 @@ class MainWindow(QMainWindow):
         # Reset text filters
         self.order_edit.clear()
         self.name_edit.clear()
-        self.id_edit.clear()
+        # id_edit was removed from the UI
         self.analysis_checkbox.setChecked(False)
     
     def get_selected_rows(self):
@@ -1034,18 +1030,30 @@ class MainWindow(QMainWindow):
             # Get filter values
             order_number = self.order_edit.text().strip()
             separator_name = self.name_edit.text().strip()
-            record_id = self.id_edit.text().strip()
+            # record_id = self.id_edit.text().strip()  # Remove ID filter
             analysis_only = self.analysis_checkbox.isChecked()
             
             # Show loading indicator
             self.statusBar().showMessage(self.tr("Searching database..."))
             
-            # Perform search without date filters
+            # Set default date range (last 7 days) if no filters are applied
+            from_date = None
+            to_date = None
+            
+            # Check if all filters are empty
+            if not order_number and not separator_name and not analysis_only:
+                # Use last 7 days as default
+                to_date = datetime.now().strftime('%Y-%m-%d')
+                from_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+                self.statusBar().showMessage(self.tr("Searching for records from the last 7 days..."))
+            
+            # Perform search without ID parameter
             result_df = self.sql_service.fetch_data(
-                from_date=None,  # No date filter
-                to_date=None,    # No date filter
+                from_date=from_date,
+                to_date=to_date,
                 order_number=order_number,
                 separator_name=separator_name,
+                # record_id=record_id,  # Remove ID parameter
                 analysis_only=analysis_only
             )
             
@@ -1055,7 +1063,10 @@ class MainWindow(QMainWindow):
             
             # Update status bar
             count = len(result_df) if result_df is not None else 0
-            self.statusBar().showMessage(self.tr(f"Found {count} records"))
+            if from_date and to_date and not order_number and not separator_name and not analysis_only:
+                self.statusBar().showMessage(self.tr(f"Found {count} records from the last 7 days"))
+            else:
+                self.statusBar().showMessage(self.tr(f"Found {count} records"))
             
         except Exception as e:
             self.statusBar().showMessage(self.tr("Error searching database"))
@@ -1070,7 +1081,7 @@ class MainWindow(QMainWindow):
         # Clear all filters first
         self.order_edit.clear()
         self.name_edit.clear()
-        self.id_edit.clear()
+        # self.id_edit was removed from the UI
         self.analysis_checkbox.setChecked(False)
         self.clear_date_filter()
         
