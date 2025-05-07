@@ -1149,13 +1149,13 @@ class MainWindow(QMainWindow):
         else:
             self.statusBar().showMessage(self.tr("Cleared all selections"))
     
-    def eventFilter(self, obj, event):
-        """Handle events for filtered objects"""
-        if event.type() == event.Type.KeyPress:
-            if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
-                # If Enter/Return is pressed in a monitored field, trigger search
-                self.search_database()
-                return True
+def eventFilter(self, obj, event):
+    """Handle events for filtered objects"""
+    if event.type() == event.Type.KeyPress:
+        if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
+            # If Enter/Return is pressed in a monitored field, trigger search
+            self.search_database()
+            return True
     
-        # Pass other events to the parent class
-        return super().eventFilter(obj, event)
+    # # Pass other events to the parent class
+    # return super().eventFilter(obj, event)
