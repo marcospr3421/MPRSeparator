@@ -41,15 +41,39 @@ class SortableTableModel(QStandardItemModel):
         super().sort(column, order)
 
 class MainWindow(QMainWindow):
-    def __init__(self, language_manager=None):
+    def __init__(self, language_manager, show_language_selector=False):
         super().__init__()
+        self.language_manager = language_manager
         
+        # Initialize UI
+        self.setup_ui()
+        
+        # # Hide language selector if specified
+        # if not show_language_selector:
+        #     self.hide_language_selector()
+    
+    # def hide_language_selector(self):
+    #     """Hide the language selection UI components"""
+    #     # Find and hide the language selector button/dropdown
+    #     if hasattr(self, 'language_selector'):
+    #         self.language_selector.hide()
+        
+    #     # Remove the check for language_button as it doesn't exist
+    #     # If you need this functionality, make sure to create language_button somewhere
+        
+    #     # Find language label by object name instead of attribute
+    #     language_label = self.findChild(QLabel, "language_label")
+    #     if language_label:
+    #         language_label.hide()
+    
+    def setup_ui(self):
+        """Setup the main user interface"""
         self.data_model = DataModel()
         self.sql_service = SQLService()
         
         # Initialize language manager
-        if language_manager:
-            self.language_manager = language_manager
+        if self.language_manager:
+            self.language_manager = self.language_manager
         else:
             self.language_manager = LanguageManager()
             
@@ -138,18 +162,22 @@ class MainWindow(QMainWindow):
             print("No language change needed (same language)")
     
     def retranslate_ui(self, language_code=None):
-        """Update all UI text with new translations"""
-        print(f"Retranslating UI for language: {language_code if language_code else 'default'}")
+        """Update all UI text with Portuguese translations"""
+        print("Using Portuguese (Brazil) language")
         
         # Window title
         new_title = self.tr("MPR Separator")
         self.setWindowTitle(new_title)
-        print(f"Window title translated to: {new_title}")
         
-        # Update toolbar (if language_label exists)
+        # Remove language selector UI components
         language_label = self.findChild(QLabel, "language_label")
         if language_label:
-            language_label.setText(self.tr("Language") + ": ")
+            language_label.hide()
+            
+        # If you have a language combo box, hide it too
+        language_combo = self.findChild(QComboBox, "language_combo")
+        if language_combo:
+            language_combo.hide()
         
         # Update import section
         import_label = self.findChild(QLabel, "import_label")
@@ -1136,4 +1164,4 @@ class MainWindow(QMainWindow):
         if qt_translation == text and hasattr(self, 'language_manager'):
             return self.language_manager.translate(text)
         
-        return qt_translation 
+        return qt_translation

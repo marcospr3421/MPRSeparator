@@ -25,20 +25,18 @@ def main() -> None:
     print(f"Application directory: {project_root}")
     print(f"Translation directory: {project_root / 'translations'}")
     
-    # Create language manager - must be created before the MainWindow
+    # Create language manager with fixed Portuguese language
     language_manager = LanguageManager()
     
-    # Install translator at the application level
-    # Do NOT create a separate translator here as it would conflict with
-    # the one from the LanguageManager
+    # Install translator at the application level with Portuguese only
     app.installTranslator(language_manager.translator)
     
-    # Create and show the main window, passing language_manager reference
-    window = MainWindow(language_manager)
+    # Create and show the main window, disabling language selection UI
+    window = MainWindow(language_manager, show_language_selector=False)
     window.show()
     
     # Start the application event loop
     sys.exit(app.exec())
 
 if __name__ == "__main__":
-    main() 
+    main()
