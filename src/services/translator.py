@@ -35,7 +35,7 @@ class LanguageManager(QObject):
                 "Separator:": "Separador:",
                 "ID:": "ID:",
                 "Analysis Only": "Apenas Análise",
-                "Search Database": "Pesquisar Banco de Dados", 
+                "Search Database": "PROCURAR 🔍", 
                 "All Records": "Todos os Registros",
                 "Reset": "Redefinir",
                 "Ready": "Pronto"

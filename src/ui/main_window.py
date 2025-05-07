@@ -235,7 +235,11 @@ class MainWindow(QMainWindow):
         # Update action buttons
         self.select_all_checkbox.setText(self.tr("Select All"))
         self.edit_selected_button.setText(self.tr("Edit Selected"))
-        self.delete_selected_button.setText(self.tr("Delete Selected"))
+        # Check if all_records_button exists before setting text
+        if hasattr(self, 'all_records_button'):
+            self.all_records_button.setText(self.tr("All Records"))
+        # The delete_selected_button is commented out in setup_action_buttons,
+        # so we don't need to check for it here
         
         # Update status bar if it has message
         current_status = self.statusBar().currentMessage()
@@ -339,21 +343,17 @@ class MainWindow(QMainWindow):
         # Button layout
         button_layout = QHBoxLayout()
         
-        # Search button
-        self.search_button = QPushButton(self.tr("Search Database"))
-        self.search_button.clicked.connect(self.search_database)
-        
-        # All Records button
+        # Define All Records button but don't add it to the layout
         self.all_records_button = QPushButton(self.tr("All Records"))
         self.all_records_button.clicked.connect(self.search_all_records)
+        # button_layout.addWidget(self.all_records_button)  # Not adding to layout
         
-        # Reset button 
+        # Create the reset button here but don't add it to this layout
         self.reset_button = QPushButton(self.tr("Reset"))
         self.reset_button.clicked.connect(self.reset_filters_and_results)
         
-        button_layout.addWidget(self.search_button)
-        button_layout.addWidget(self.all_records_button)
-        button_layout.addWidget(self.reset_button)
+        # Don't add reset button here anymore
+        # button_layout.addWidget(self.reset_button)
         
         filter_layout.addLayout(date_layout)
         filter_layout.addLayout(text_layout)
@@ -426,8 +426,11 @@ class MainWindow(QMainWindow):
         self.edit_selected_button = QPushButton(self.tr("Edit Selected"))
         self.edit_selected_button.clicked.connect(self.edit_selected_records)
         
-        self.delete_selected_button = QPushButton(self.tr("Delete Selected"))
-        self.delete_selected_button.clicked.connect(self.delete_selected_records)
+        # Add reset button here (moved from filter section)
+        
+        # Create search button
+        self.search_button = QPushButton(self.tr("Search Database"))
+        self.search_button.clicked.connect(self.search_database)
         
         # Add widgets to layouts
         selection_layout.addWidget(self.select_all_checkbox)
@@ -435,7 +438,8 @@ class MainWindow(QMainWindow):
         
         button_layout.addLayout(selection_layout)
         button_layout.addWidget(self.edit_selected_button)
-        button_layout.addWidget(self.delete_selected_button)
+        button_layout.addWidget(self.reset_button)  # Add the reset button here, next to Edit Selected
+        button_layout.addWidget(self.search_button)
         
         self.main_layout.addLayout(button_layout)
     
