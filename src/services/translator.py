@@ -37,7 +37,7 @@ class LanguageManager(QObject):
                 "Analysis Only": "Apenas Análise",
                 "Search Database": "PROCURAR 🔍", 
                 "All Records": "Todos os Registros",
-                "Reset": "Redefinir",
+                "Reset": "Limpar",
                 "Ready": "Pronto"
             }
         }

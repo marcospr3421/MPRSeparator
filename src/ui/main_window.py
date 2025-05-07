@@ -360,6 +360,16 @@ class MainWindow(QMainWindow):
         filter_layout.addLayout(button_layout)
         
         self.main_layout.addWidget(filter_group)
+        
+        # Add these lines after creating all the input fields (after text_layout setup)
+        # Connect Enter/Return key presses to trigger search
+        self.order_edit.returnPressed.connect(self.search_database)
+        self.name_edit.returnPressed.connect(self.search_database)
+        self.id_edit.returnPressed.connect(self.search_database)
+        
+        # Install event filter for date fields
+        self.from_date.installEventFilter(self)
+        self.to_date.installEventFilter(self)
     
     def setup_data_table(self):
         """Create the data table view"""
@@ -1169,3 +1179,15 @@ class MainWindow(QMainWindow):
             return self.language_manager.translate(text)
         
         return qt_translation
+
+    def eventFilter(self, obj, event):
+        """Handle events for filtered objects"""
+        if event.type() == event.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
+                # If Enter/Return is pressed in a date field, trigger search
+                if obj in [self.from_date, self.to_date]:
+                    self.search_database()
+                    return True
+    
+        # Pass other events to the parent class
+        return super().eventFilter(obj, event)
