@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QPushButton, QLabel, QFileDialog, QMessageBox,
     QTableView, QHeaderView, QCheckBox, QDateEdit, QDialog, QFormLayout, QLineEdit, QDialogButtonBox,
-    QGroupBox, QFrame, QMenu, QToolBar, QComboBox
+    QGroupBox, QFrame, QMenu, QToolBar, QComboBox, QProgressDialog
 )
 from PySide6.QtCore import Qt, QDate, QSortFilterProxyModel, QModelIndex, QTranslator, QCoreApplication
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QIcon, QPixmap, QBrush, QColor
@@ -65,6 +65,29 @@ class MainWindow(QMainWindow):
     #     language_label = self.findChild(QLabel, "language_label")
     #     if language_label:
     #         language_label.hide()
+    
+    def update_progress(self, progress_dialog):
+        """Create a callback function for updating progress
+        
+        Args:
+            progress_dialog: The QProgressDialog to update
+            
+        Returns:
+            Callback function that takes percentage value
+        """
+        def callback(percent):
+            # Calculate percentage in the 80-100% range (since db save is 80-100%)
+            value = 80 + int(percent * 0.2)
+            progress_dialog.setValue(value)
+            progress_dialog.setLabelText(f"{self.tr('Saving to database...')} {percent:.0f}%")
+            
+            # Process events to update UI
+            QCoreApplication.processEvents()
+            
+            # Check if user canceled
+            return not progress_dialog.wasCanceled()
+        
+        return callback
     
     def setup_ui(self):
         """Setup the main user interface"""
@@ -429,6 +452,17 @@ class MainWindow(QMainWindow):
             return
         
         try:
+            # Create progress dialog
+            progress = QProgressDialog(self.tr("Reading file..."), self.tr("Cancel"), 0, 100, self)
+            progress.setWindowTitle(self.tr("Importing Data"))
+            progress.setWindowModality(Qt.WindowModality.WindowModal)
+            progress.setValue(0)
+            progress.show()
+            
+            # Update progress - file reading (20%)
+            progress.setValue(10)
+            progress.setLabelText(self.tr("Reading file data..."))
+            
             # Import data based on file extension
             if file_path.endswith('.csv'):
                 df = pd.read_csv(file_path)
@@ -437,14 +471,43 @@ class MainWindow(QMainWindow):
             else:
                 raise ValueError("Unsupported file format")
             
+            # Update progress - processing (40%)
+            progress.setValue(40)
+            progress.setLabelText(self.tr("Processing data..."))
+            
             # Show preview dialog
+            if progress.wasCanceled():
+                return
+                
+            # Close progress during preview display
+            progress.close()
+            
             if self.show_import_preview(df, os.path.basename(file_path)):
+                # Reopen progress dialog for saving
+                progress = QProgressDialog(self.tr("Saving data..."), self.tr("Cancel"), 0, 100, self)
+                progress.setWindowTitle(self.tr("Saving Data"))
+                progress.setWindowModality(Qt.WindowModality.WindowModal)
+                progress.setValue(60)
+                progress.show()
+                
                 # Process and validate data
                 self.data_model.set_dataframe(df)
                 
+                # Update progress - saving (80%)
+                progress.setValue(80)
+                progress.setLabelText(self.tr("Saving to database..."))
+                
+                if progress.wasCanceled():
+                    return
+                    
                 # Automatically save the imported data to the database
                 try:
-                    records_saved = self.sql_service.save_data(df)
+                    records_saved = self.sql_service.save_data(df, progress_callback=self.update_progress(progress))
+                    
+                    # Complete progress
+                    progress.setValue(100)
+                    progress.setLabelText(self.tr("Import complete"))
+                    
                     self.statusBar().showMessage(f"{self.tr('Imported and saved')} {records_saved} {self.tr('records to database from')} {os.path.basename(file_path)}")
                     
                     # Refresh the view by performing a search to display what was saved
@@ -466,6 +529,9 @@ class MainWindow(QMainWindow):
                     self.display_data()
                     self.statusBar().showMessage(f"{self.tr('Imported')} {len(df)} {self.tr('records from')} {os.path.basename(file_path)} {self.tr('(not saved to database)')}")
                 
+                finally:
+                    progress.close()
+    
         except Exception as e:
             QMessageBox.critical(
                 self, 
@@ -816,7 +882,11 @@ class MainWindow(QMainWindow):
             # Date of separation
             date_str = self.table_model.item(row, 3).text()  # Date (column 3)
             try:
+                # Try different date formats (both yyyy-MM-dd and dd-MM-yyyy)
                 date = QDate.fromString(date_str, "yyyy-MM-dd")
+                if not date.isValid():
+                    date = QDate.fromString(date_str, "dd-MM-yyyy")
+                
                 if date.isValid():
                     date_edit.setDate(date)
                     original_values['DateOfSeparation'] = date_str
@@ -824,7 +894,7 @@ class MainWindow(QMainWindow):
                     original_values['DateOfSeparation'] = ""
             except Exception:
                 original_values['DateOfSeparation'] = ""
-                
+            
             # Analysis checkbox
             analysis_item = self.table_model.item(row, 4)  # Analysis (column 4)
             is_checked = analysis_item and analysis_item.checkState() == Qt.CheckState.Checked
@@ -1159,3 +1229,4 @@ def eventFilter(self, obj, event):
     
     # # Pass other events to the parent class
     # return super().eventFilter(obj, event)
+

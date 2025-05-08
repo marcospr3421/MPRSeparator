@@ -1,0 +1,24 @@
+{
+  "name": "mprseparator",
+  "version": "1.0.0",
+  "description": "A desktop application for managing separator data, importing from CSV/XLSX files, and storing in a Microsoft SQL Server database with Azure Key Vault authentication.",
+  "main": "excel-date-converter.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marcospr3421/MPRSeparator.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/marcospr3421/MPRSeparator/issues"
+  },
+  "homepage": "https://github.com/marcospr3421/MPRSeparator#readme",
+  "dependencies": {
+    "papaparse": "^5.5.2",
+    "xlsx": "^0.18.5"
+  }
+}

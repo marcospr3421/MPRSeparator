@@ -63,8 +63,16 @@ class SQLService:
         self.cursor = None
         self.connection = None
     
-    def save_data(self, df):
-        """Save data to the database"""
+    def save_data(self, df, progress_callback=None):
+        """Save DataFrame to database with progress reporting
+        
+        Args:
+            df: DataFrame with data to save
+            progress_callback: Optional function to call with progress percentage
+            
+        Returns:
+            int: Number of records saved
+        """
         if df is None or df.empty:
             return 0
         
@@ -81,7 +89,8 @@ class SQLService:
             table_name = os.environ.get("DB_TABLE", "SeparatorRecords")
             
             # Prepare data for insertion
-            for _, row in df.iterrows():
+            total_records = len(df)
+            for i, row in df.iterrows():
                 # Extract data from the row
                 order_number = str(row.get('OrderNumber', ''))
                 separator_name = str(row.get('SeparatorName', ''))
@@ -119,6 +128,13 @@ class SQLService:
                             raise
                 else:
                     raise ValueError("Database cursor is not available")
+                
+                # Report progress if callback provided
+                if progress_callback and i % max(1, total_records // 100) == 0:
+                    percent = (i / total_records) * 100
+                    # Check if user canceled
+                    if not progress_callback(percent):
+                        break
             
             # Commit the transaction
             if self.connection:
@@ -142,6 +158,10 @@ class SQLService:
         finally:
             # Disconnect from the database
             self.disconnect()
+        
+        # Final progress update
+        if progress_callback:
+            progress_callback(100)
         
         return records_saved
     
@@ -379,4 +399,4 @@ class SQLService:
             
         finally:
             # Disconnect from the database
-            self.disconnect() 
+            self.disconnect()
