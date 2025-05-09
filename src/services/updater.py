@@ -9,6 +9,8 @@ import requests
 import time
 from pathlib import Path
 from packaging import version
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.secrets import SecretClient
 
 class Updater:
     """
@@ -225,3 +227,33 @@ del "%~f0"
         
         with open(self.version_file, 'w') as f:
             json.dump(version_info, f)
+
+# Azure Key Vault integration
+# Replace with your Key Vault URL
+key_vault_url = "https://mprkv2024az.vault.azure.net/"
+
+# Create a SecretClient using DefaultAzureCredential
+credential = DefaultAzureCredential()
+client = SecretClient(vault_url=key_vault_url, credential=credential)
+
+# Retrieve secrets
+try:
+    # Try to get connection string directly from the environment variable first
+    conn_str = os.environ.get("DB_CONN_STR")
+    if not conn_str:
+        # Try to get individual parameters from Key Vault with correct case-sensitive names
+        # or fall back to environment variables
+        sql_server = os.environ.get("DB_SERVER")
+        sql_database = os.environ.get("DB_NAME")
+        sql_username = os.environ.get("DB_USERNAME")
+        sql_password = os.environ.get("DB_PASSWORD")
+        
+        # If we have all the necessary parameters, construct a connection string
+        if sql_server and sql_database and sql_username and sql_password:
+            conn_str = (f"Driver={{ODBC Driver 18 for SQL Server}};"
+                        f"Server={sql_server};Database={sql_database};"
+                        f"Uid={sql_username};Pwd={sql_password};"
+                        f"Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;")
+except Exception as e:
+    print(f"Error accessing database configuration: {str(e)}")
+    conn_str = None

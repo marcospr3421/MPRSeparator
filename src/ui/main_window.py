@@ -12,13 +12,14 @@ import pandas as pd
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
+import sys
 
 from src.data.data_model import DataModel
 from src.services.sql_service import SQLService
 from src.services.translator import LanguageManager
 from src.services.updater import Updater
-APP_VERSION = "1.0.0"
-GITHUB_REPO = "your-github-username/MPRSeparator"  # Replace with your actual GitHub username and repo
+APP_VERSION = "1.0.1"
+GITHUB_REPO = "marcospr3421/MPRSeparator"  # Replace with your actual GitHub username and repo
 
 class UpdateDownloader(QObject):
     """Worker class for downloading updates in a separate thread"""
@@ -119,8 +120,15 @@ class MainWindow(QMainWindow):
         self.language_manager.language_changed.connect(self.retranslate_ui)
         
         # Setup the UI
-        self.setWindowTitle(self.tr("MPR Separator"))
+        self.setWindowTitle("MPR Separator")
         self.setMinimumSize(1000, 700)
+        
+        # Add application icon
+        app_icon = QIcon()
+        icon_path = os.path.join(self.get_resource_path(), "assets", "app_icon.ico")
+        if os.path.exists(icon_path):
+            app_icon = QIcon(icon_path)
+            self.setWindowIcon(app_icon)
         
         # Create central widget and layout
         self.central_widget = QWidget()
@@ -1358,4 +1366,19 @@ class MainWindow(QMainWindow):
             # Install the update
             self.updater.install_update(file_path, version_str)
             QApplication.quit()  # Close the application to allow the update to proceed
+    
+    def get_resource_path(self):
+        """Get the path to resource files, works for dev and for PyInstaller"""
+        try:
+            # PyInstaller creates a temp folder and stores path in _MEIPASS
+            base_path = getattr(sys, '_MEIPASS', None)
+            if base_path:
+                return base_path
+                
+            # If not running as executable, use the script's directory
+            return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        except Exception:
+            return os.path.dirname(os.path.abspath(__file__))
+
+# SQLService is now imported from src.services.sql_service
 

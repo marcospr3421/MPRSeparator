@@ -3,6 +3,11 @@ import pyodbc
 import os
 from datetime import datetime
 import logging
+import sys
+
+# Add project root to sys.path if needed
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from AzureKeyVault import AzureKeyVaultClient
 
 class SQLService:
     def __init__(self):
@@ -16,27 +21,76 @@ class SQLService:
         )
         self.logger = logging.getLogger(__name__)
         
-    def connect(self):
-        """Connect to the SQL Server database"""
+        # Initialize Key Vault client - use environment variable if available
+        key_vault_url = os.environ.get("KEY_VAULT_URI", "https://mprkv2024az.vault.azure.net/")
         try:
-            # Get database connection details from environment variables
-            server = os.environ.get("DB_SERVER", "")
-            database = os.environ.get("DB_NAME", "")
-            username = os.environ.get("DB_USERNAME", "")
-            password = os.environ.get("DB_PASSWORD", "")
+            self.key_vault_client = AzureKeyVaultClient(vault_url=key_vault_url)
+            self.logger.info(f"Azure Key Vault client initialized with URL: {key_vault_url}")
+        except Exception as e:
+            self.logger.warning(f"Failed to initialize Azure Key Vault client: {str(e)}. Will fall back to environment variables if needed.")
+            self.key_vault_client = None
+        
+    def connect(self):
+        """Connect to the SQL Server database using secure credential management"""
+        try:
+            conn_str = None
             
-            if not server or not database:
-                raise ValueError("Database connection environment variables not set properly")
+            # Priority 1: Try to get connection string from Key Vault
+            if self.key_vault_client:
+                try:
+                    self.logger.info("Attempting to retrieve connection string from Azure Key Vault")
+                    conn_str = self.key_vault_client.get_secret("SqlConnString")
+                    self.logger.info("Successfully retrieved connection string from Azure Key Vault")
+                except Exception as kv_error:
+                    self.logger.warning(f"Could not retrieve connection string from Key Vault: {str(kv_error)}")
             
-            # Create connection string
-            conn_str = (
-                f"DRIVER={{ODBC Driver 17 for SQL Server}};"
-                f"SERVER={server};"
-                f"DATABASE={database};"
-                f"UID={username};"
-                f"PWD={password};"
-                f"Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
-            )
+            # Priority 2: Try to get connection string from environment variables
+            if not conn_str:
+                conn_str = os.environ.get("DB_CONN_STR")
+                if conn_str:
+                    self.logger.info("Using connection string from environment variable DB_CONN_STR")
+                else:
+                    self.logger.info("Connection string not available from Key Vault or environment variables")
+            
+            # Priority 3: Build connection string from individual parameters
+            if not conn_str:
+                # Try to get individual parameters from Key Vault first
+                server = None
+                database = None
+                username = None
+                password = None
+                
+                if self.key_vault_client:
+                    try:
+                        server = self.key_vault_client.get_secret("SqlServerName")
+                        database = self.key_vault_client.get_secret("SqlDatabaseName")
+                        username = self.key_vault_client.get_secret("SqlUsername")
+                        password = self.key_vault_client.get_secret("SqlPassword")
+                        self.logger.info("Using database credentials from Azure Key Vault")
+                    except Exception as kv_error:
+                        self.logger.warning(f"Could not retrieve all SQL parameters from Key Vault: {str(kv_error)}")
+                
+                # Fall back to environment variables if Key Vault retrieval failed
+                if not server or not database or not username or not password:
+                    server = os.environ.get("DB_SERVER", "")
+                    database = os.environ.get("DB_NAME", "")
+                    username = os.environ.get("DB_USERNAME", "")
+                    password = os.environ.get("DB_PASSWORD", "")
+                    self.logger.info("Using database credentials from environment variables")
+                
+                # Validate we have the required parameters
+                if not server or not database:
+                    raise ValueError("Database connection parameters not available from Key Vault or environment variables")
+                
+                # Create connection string from components
+                conn_str = (
+                    f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+                    f"SERVER={server};"
+                    f"DATABASE={database};"
+                    f"UID={username};"
+                    f"PWD={password};"
+                    f"Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
+                )
             
             # Connect to the database
             self.connection = pyodbc.connect(conn_str)
