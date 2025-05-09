@@ -2,10 +2,11 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QPushButton, QLabel, QFileDialog, QMessageBox,
     QTableView, QHeaderView, QCheckBox, QDateEdit, QDialog, QFormLayout, QLineEdit, QDialogButtonBox,
-    QGroupBox, QFrame, QMenu, QToolBar, QComboBox, QProgressDialog
+    QGroupBox, QFrame, QMenu, QToolBar, QComboBox, QProgressDialog, QApplication
 )
-from PySide6.QtCore import Qt, QDate, QSortFilterProxyModel, QModelIndex, QTranslator, QCoreApplication
+from PySide6.QtCore import Qt, QDate, QSortFilterProxyModel, QModelIndex, QTranslator, QCoreApplication, QTimer, QThread, Signal, QObject
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QIcon, QPixmap, QBrush, QColor
+from PySide6.QtWidgets import QProgressBar
 
 import pandas as pd
 import os
@@ -15,6 +16,36 @@ from pathlib import Path
 from src.data.data_model import DataModel
 from src.services.sql_service import SQLService
 from src.services.translator import LanguageManager
+from src.services.updater import Updater
+APP_VERSION = "1.0.0"
+GITHUB_REPO = "your-github-username/MPRSeparator"  # Replace with your actual GitHub username and repo
+
+class UpdateDownloader(QObject):
+    """Worker class for downloading updates in a separate thread"""
+    progress = Signal(int)
+    finished = Signal()
+    
+    def __init__(self, updater, release_info, version_str):
+        super().__init__()
+        self.updater = updater
+        self.release_info = release_info
+        self.version_str = version_str
+        self.success = False
+        self.file_path = None
+        
+    def run(self):
+        """Run the download process"""
+        try:
+            self.file_path = self.updater.download_update(
+                self.release_info, 
+                progress_callback=self.progress.emit
+            )
+            self.success = True
+        except Exception as e:
+            print(f"Download error: {str(e)}")
+            self.success = False
+        finally:
+            self.finished.emit()
 
 class SortableTableModel(QStandardItemModel):
     """Custom model that handles sorting properly for different data types"""
@@ -48,23 +79,8 @@ class MainWindow(QMainWindow):
         # Initialize UI
         self.setup_ui()
         
-        # # Hide language selector if specified
-        # if not show_language_selector:
-        #     self.hide_language_selector()
-    
-    # def hide_language_selector(self):
-    #     """Hide the language selection UI components"""
-    #     # Find and hide the language selector button/dropdown
-    #     if hasattr(self, 'language_selector'):
-    #         self.language_selector.hide()
-        
-    #     # Remove the check for language_button as it doesn't exist
-    #     # If you need this functionality, make sure to create language_button somewhere
-        
-    #     # Find language label by object name instead of attribute
-    #     language_label = self.findChild(QLabel, "language_label")
-    #     if language_label:
-    #         language_label.hide()
+        # Setup the automatic update checker
+        self.setup_update_checker()
     
     def update_progress(self, progress_dialog):
         """Create a callback function for updating progress
@@ -1219,14 +1235,127 @@ class MainWindow(QMainWindow):
         else:
             self.statusBar().showMessage(self.tr("Cleared all selections"))
     
-def eventFilter(self, obj, event):
-    """Handle events for filtered objects"""
-    if event.type() == event.Type.KeyPress:
-        if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
-            # If Enter/Return is pressed in a monitored field, trigger search
-            self.search_database()
-            return True
-    
-    # # Pass other events to the parent class
-    # return super().eventFilter(obj, event)
+    def setup_update_checker(self):
+        """Setup the automatic update checker"""
+        self.updater = Updater(GITHUB_REPO, APP_VERSION)
+        
+        # Check if we just completed an update
+        if self.updater.check_for_completed_update():
+            QMessageBox.information(
+                self,
+                self.tr("Update Complete"),
+                self.tr("MPR Separator has been successfully updated to version {0}").format(APP_VERSION)
+            )
+        
+        # Schedule periodic update checks
+        self.update_timer = QTimer(self)
+        self.update_timer.timeout.connect(self.check_for_updates)
+        self.update_timer.start(3600000)  # Check every hour (3600000 ms)
+        
+        # Do an initial update check with a delay
+        QTimer.singleShot(3000, self.check_for_updates)
+
+    def check_for_updates(self):
+        """Check for application updates"""
+        try:
+            update_available, latest_version, release_notes, release_info = self.updater.check_for_updates()
+            
+            if update_available:
+                update_message = (
+                    f"{self.tr('A new version of MPR Separator is available!')}\n\n"
+                    f"{self.tr('Current version')}: {APP_VERSION}\n"
+                    f"{self.tr('New version')}: {latest_version}\n\n"
+                    f"{self.tr('Release notes')}:\n{release_notes}\n\n"
+                    f"{self.tr('Would you like to download and install this update?')}"
+                )
+                
+                reply = QMessageBox.question(
+                    self,
+                    self.tr("Update Available"),
+                    update_message,
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    self.download_and_install_update(release_info, latest_version)
+        
+        except Exception as e:
+            # Silently handle errors to not disrupt the user experience
+            print(f"Error in automatic update check: {str(e)}")
+
+    def download_and_install_update(self, release_info, version_str):
+        """Download and install the update"""
+        # Create and configure the progress dialog
+        progress_dialog = QDialog(self)
+        progress_dialog.setWindowTitle(self.tr("Downloading Update"))
+        progress_dialog.setMinimumWidth(400)
+        progress_dialog.setModal(True)
+        
+        layout = QVBoxLayout(progress_dialog)
+        
+        # Add information about the update
+        info_label = QLabel(f"{self.tr('Downloading MPR Separator')} {version_str}...")
+        layout.addWidget(info_label)
+        
+        # Add progress bar
+        progress_bar = QProgressBar()
+        progress_bar.setRange(0, 100)
+        layout.addWidget(progress_bar)
+        
+        # Add cancel button
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
+        button_box.rejected.connect(progress_dialog.reject)
+        layout.addWidget(button_box)
+        
+        # Show the dialog but don't block
+        progress_dialog.show()
+        
+        # Update function for the progress callback
+        def update_progress(progress):
+            progress_bar.setValue(progress)
+            if progress >= 100:
+                progress_dialog.accept()
+        
+        # Start download in a separate thread
+        download_thread = QThread()
+        download_worker = UpdateDownloader(self.updater, release_info, version_str)
+        download_worker.moveToThread(download_thread)
+        
+        # Connect signals
+        download_thread.started.connect(download_worker.run)
+        download_worker.progress.connect(update_progress)
+        download_worker.finished.connect(download_thread.quit)
+        download_worker.finished.connect(download_worker.deleteLater)
+        download_thread.finished.connect(download_thread.deleteLater)
+        download_thread.finished.connect(lambda: self.handle_download_complete(download_worker.success, 
+                                                                           download_worker.file_path,
+                                                                           version_str))
+        
+        # Start download
+        download_thread.start()
+
+    def handle_download_complete(self, success, file_path, version_str):
+        """Handle the completion of the download"""
+        if not success or not file_path:
+            QMessageBox.warning(
+                self,
+                self.tr("Download Failed"),
+                self.tr("Failed to download the update. Please try again later or download manually from the project website.")
+            )
+            return
+        
+        # Ask user to confirm installation
+        reply = QMessageBox.question(
+            self,
+            self.tr("Install Update"),
+            self.tr("The update has been downloaded. The application will close and the update will be installed. Continue?"),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            # Install the update
+            self.updater.install_update(file_path, version_str)
+            QApplication.quit()  # Close the application to allow the update to proceed
 
