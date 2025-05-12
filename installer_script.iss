@@ -1,6 +1,6 @@
 
 #define MyAppName "MPR Labs - MPR Separator"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "1.0.2"
 #define MyAppPublisher "MPR Labs"
 #define MyAppURL "https://github.com/marcospr3421/MPRSeparator"
 #define MyAppExeName "MPRSeparator.exe"
@@ -16,7 +16,7 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=installer
-OutputBaseFilename=MPRSeparator_Setup_v1.0.1
+OutputBaseFilename=MPRSeparator_Setup_v1.0.2
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
