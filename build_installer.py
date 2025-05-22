@@ -65,10 +65,14 @@ def build_exe():
     # Get version for the executable
     version = get_version()
     
-    # Clean output directories
+    # Clean output directories safely
     for dir_name in ['build', 'dist']:
         if os.path.exists(dir_name):
-            shutil.rmtree(dir_name)
+            try:
+                shutil.rmtree(dir_name)
+            except PermissionError as e:
+                print(f"Aviso: Não foi possível remover o diretório {dir_name}: {str(e)}")
+                print("Tentando continuar mesmo assim...")
     
     # Find the main script file
     try:
@@ -81,6 +85,11 @@ def build_exe():
         if not os.path.exists(main_script):
             raise FileNotFoundError(f"The specified file '{main_script}' does not exist.")
     
+    # Criar um diretório temporário para o build com permissões adequadas
+    import tempfile
+    temp_build_dir = tempfile.mkdtemp(prefix='mpr_build_')
+    print(f"Usando diretório temporário para build: {temp_build_dir}")
+    
     # Run PyInstaller
     pyinstaller_args = [
         'pyinstaller',
@@ -89,6 +98,7 @@ def build_exe():
         '--onefile',
         '--clean',
         '--noconfirm',
+        f'--workpath={temp_build_dir}',
     ]
     
     # Add icon if it exists
@@ -108,14 +118,59 @@ def build_exe():
     pyinstaller_args.append(main_script)
     
     print(f"Running PyInstaller with arguments: {' '.join(pyinstaller_args)}")
-    subprocess.run(pyinstaller_args, check=True)
     
-    # Copy necessary files to dist directory
-    if os.path.exists('version.json'):
-        os.makedirs('dist', exist_ok=True)
-        shutil.copy('version.json', 'dist/version.json')
+    try:
+        # Execute PyInstaller with lower privileges if possible
+        result = subprocess.run(pyinstaller_args, check=False, capture_output=True, text=True)
+        
+        # Check for errors
+        if result.returncode != 0:
+            print(f"Erro ao executar PyInstaller (código {result.returncode}):")
+            print(result.stderr)
+            
+            # Tentar identificar problemas comuns
+            if "PermissionError" in result.stderr or "Access is denied" in result.stderr:
+                print("\nErro de permissão detectado. Sugestões:")
+                print("1. Feche todos os programas que possam estar usando arquivos no diretório")
+                print("2. Execute este script em um diretório onde você tenha permissões completas")
+                print("3. Tente executar o prompt de comando como administrador")
+            
+            # Limpar diretório temporário
+            try:
+                shutil.rmtree(temp_build_dir)
+            except Exception as cleanup_error:
+                print(f"Aviso: Não foi possível limpar o diretório temporário: {str(cleanup_error)}")
+            
+            return None
+        
+        # Mostrar saída do PyInstaller para debug
+        if result.stdout:
+            print("Saída do PyInstaller:\n", result.stdout)
+        
+        # Copy necessary files to dist directory
+        if os.path.exists('version.json'):
+            os.makedirs('dist', exist_ok=True)
+            shutil.copy('version.json', 'dist/version.json')
+        
+        # Verificar se o executável foi criado
+        exe_path = 'dist/MPRSeparator.exe'
+        if os.path.exists(exe_path):
+            print(f"Executable built successfully: {exe_path} (v{version})")
+        else:
+            print(f"Aviso: O executável não foi encontrado em {exe_path}")
+            print("Verifique a saída do PyInstaller acima para detalhes.")
     
-    print(f"Executable built successfully: dist/MPRSeparator.exe (v{version})")
+    except Exception as e:
+        print(f"Erro durante o processo de build: {str(e)}")
+        return None
+    finally:
+        # Limpar diretório temporário
+        try:
+            shutil.rmtree(temp_build_dir)
+            print(f"Diretório temporário removido: {temp_build_dir}")
+        except Exception as cleanup_error:
+            print(f"Aviso: Não foi possível limpar o diretório temporário: {str(cleanup_error)}")
+    
     return version
 
 def build_installer(version):
@@ -138,14 +193,17 @@ AppPublisher={{#MyAppPublisher}}
 AppPublisherURL={{#MyAppURL}}
 AppSupportURL={{#MyAppURL}}
 AppUpdatesURL={{#MyAppURL}}
-DefaultDirName={{autopf}}\\{{#MyAppName}}
+DefaultDirName={{localappdata}}\\{{#MyAppName}}
 DisableProgramGroupPage=yes
 OutputDir=installer
 OutputBaseFilename=MPRSeparator_Setup_v{version}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
-PrivilegesRequired=admin
+PrivilegesRequired=lowest
+CreateAppDir=yes
+UninstallDisplayIcon={{app}}\\{{#MyAppExeName}}
+SetupLogging=yes
 ArchitecturesInstallIn64BitMode=x64
 
 [Languages]
@@ -165,6 +223,14 @@ Name: "{{autodesktop}}\\{{#MyAppName}}"; Filename: "{{app}}\\{{#MyAppExeName}}";
 
 [Run]
 Filename: "{{app}}\\{{#MyAppExeName}}"; Description: "{{cm:LaunchProgram,{{#StringChange(MyAppName, '&', '&&')}}}}"; Flags: nowait postinstall skipifsilent
+
+[Dirs]
+Name: "{{localappdata}}\\{{#MyAppName}}\\Data"; Permissions: users-full
+
+[Registry]
+Root: HKCU; Subkey: "Software\\{{#MyAppPublisher}}\\{{#MyAppName}}"; Flags: uninsdeletekeyifempty
+Root: HKCU; Subkey: "Software\\{{#MyAppPublisher}}\\{{#MyAppName}}\\Settings"; Flags: uninsdeletekeyifempty
+Root: HKCU; Subkey: "Software\\{{#MyAppPublisher}}\\{{#MyAppName}}\\Settings"; ValueType: string; ValueName: "DataPath"; ValueData: "{{localappdata}}\\{{#MyAppName}}\\Data"; Flags: uninsdeletevalue
 """
     
     # Create installer directory if it doesn't exist

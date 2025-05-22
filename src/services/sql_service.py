@@ -82,15 +82,44 @@ class SQLService:
                 if not server or not database:
                     raise ValueError("Database connection parameters not available from Key Vault or environment variables")
                 
+                # Try to get SQL driver from registry
+                try:
+                    import winreg
+                    reg_path = r"Software\MPR Labs\MPR Labs - MPR Separator\Settings"
+                    registry_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_READ)
+                    sql_driver, _ = winreg.QueryValueEx(registry_key, "SqlDriver")
+                    winreg.CloseKey(registry_key)
+                    self.logger.info(f"Using SQL driver from registry: {sql_driver}")
+                except Exception as reg_error:
+                    # Default to ODBC Driver 18 if registry key not found
+                    sql_driver = "ODBC Driver 18 for SQL Server"
+                    self.logger.info(f"Using default SQL driver: {sql_driver}")
+                
                 # Create connection string from components
                 conn_str = (
-                    f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+                    f"DRIVER={{{sql_driver}}};"
                     f"SERVER={server};"
                     f"DATABASE={database};"
                     f"UID={username};"
                     f"PWD={password};"
-                    f"Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
+                    f"Encrypt=yes;TrustServerCertificate=yes;Connection Timeout=30;"
                 )
+                
+                # Try to get data path from registry
+                try:
+                    import winreg
+                    reg_path = r"Software\MPR Labs\MPR Labs - MPR Separator\Settings"
+                    registry_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_READ)
+                    data_path, _ = winreg.QueryValueEx(registry_key, "DataPath")
+                    winreg.CloseKey(registry_key)
+                    self.logger.info(f"Using data path from registry: {data_path}")
+                except Exception as reg_error:
+                    # Default to local appdata if registry key not found
+                    data_path = os.path.join(os.environ.get("LOCALAPPDATA", ""), "MPR Labs - MPR Separator", "Data")
+                    self.logger.info(f"Using default data path: {data_path}")
+                
+                # Ensure data directory exists
+                os.makedirs(data_path, exist_ok=True)
             
             # Connect to the database
             self.connection = pyodbc.connect(conn_str)
