@@ -1,10 +1,13 @@
 """Script para configurar o ambiente do MPR Separator"""
+# Este script configura o ambiente para o MPR Separator, incluindo diretórios de dados
+# e variáveis de ambiente para conexão com o banco de dados.
 import os
 import sys
 import winreg
 import logging
 import subprocess
 from pathlib import Path
+import ctypes
 
 # Configurar logging
 logging.basicConfig(
@@ -103,6 +106,63 @@ def check_odbc_driver():
         logger.error(f"Erro ao verificar driver ODBC: {str(e)}")
         return False
 
+def set_environment_variables(db_server, db_name, db_username, db_password, db_table, key_vault_uri):
+    """Configura as variáveis de ambiente para conexão com o banco de dados"""
+    try:
+        # Configurar variáveis de ambiente no registro do Windows
+        env_vars = {
+            "DB_SERVER": db_server,
+            "DB_NAME": db_name,
+            "DB_USERNAME": db_username,
+            "DB_PASSWORD": db_password,
+            "DB_TABLE": db_table or "SeparatorRecords",
+            "KEY_VAULT_URI": key_vault_uri or "https://mprkv2024az.vault.azure.net/"
+        }
+        
+        # Verificar se há valores vazios e usar valores padrão quando necessário
+        if not db_table:
+            env_vars["DB_TABLE"] = "SeparatorRecords"
+            logger.info("Usando valor padrão para DB_TABLE: SeparatorRecords")
+            
+        if not key_vault_uri:
+            env_vars["KEY_VAULT_URI"] = "https://mprkv2024az.vault.azure.net/"
+            logger.info("Usando valor padrão para KEY_VAULT_URI: https://mprkv2024az.vault.azure.net/")
+        
+        # Definir variáveis de ambiente no registro do Windows
+        for var_name, var_value in env_vars.items():
+            if var_value:  # Só definir se tiver um valor
+                try:
+                    # Definir para o processo atual
+                    os.environ[var_name] = var_value
+                    
+                    # Definir no registro para persistir
+                    reg_path = r"Environment"
+                    registry_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, 
+                                                winreg.KEY_SET_VALUE | winreg.KEY_WRITE)
+                    winreg.SetValueEx(registry_key, var_name, 0, winreg.REG_SZ, var_value)
+                    winreg.CloseKey(registry_key)
+                    logger.info(f"Variável de ambiente {var_name} configurada com sucesso")
+                except Exception as e:
+                    logger.error(f"Erro ao configurar variável de ambiente {var_name}: {str(e)}")
+        
+        # Notificar o Windows sobre a mudança nas variáveis de ambiente
+        HWND_BROADCAST = 0xFFFF
+        WM_SETTINGCHANGE = 0x001A
+        SMTO_ABORTIFHUNG = 0x0002
+        result = ctypes.windll.user32.SendMessageTimeoutW(
+            HWND_BROADCAST, WM_SETTINGCHANGE, 0, 
+            ctypes.c_wchar_p("Environment"), SMTO_ABORTIFHUNG, 1000, None)
+        
+        if result == 0:
+            logger.warning("Não foi possível notificar o Windows sobre a mudança nas variáveis de ambiente")
+        else:
+            logger.info("Windows notificado sobre a mudança nas variáveis de ambiente")
+            
+        return True
+    except Exception as e:
+        logger.error(f"Erro ao configurar variáveis de ambiente: {str(e)}")
+        return False
+
 def main():
     """Função principal para configurar o ambiente"""
     print("Configurando ambiente para MPR Separator...")
@@ -118,10 +178,33 @@ def main():
         print("Você pode precisar instalar o Microsoft ODBC Driver para SQL Server")
         print("Visite: https://learn.microsoft.com/pt-br/sql/connect/odbc/download-odbc-driver-for-sql-server")
     
+    # Configurar variáveis de ambiente se fornecidas como argumentos
+    if len(sys.argv) >= 7:
+        db_server = sys.argv[1]
+        db_name = sys.argv[2]
+        db_username = sys.argv[3]
+        db_password = sys.argv[4]
+        db_table = sys.argv[5] if len(sys.argv) > 5 else ""
+        key_vault_uri = sys.argv[6] if len(sys.argv) > 6 else ""
+        
+        if set_environment_variables(db_server, db_name, db_username, db_password, db_table, key_vault_uri):
+            print("Variáveis de ambiente para conexão com o banco de dados configuradas com sucesso.")
+        else:
+            print("ERRO: Não foi possível configurar as variáveis de ambiente para conexão com o banco de dados.")
+            print("Você pode precisar configurá-las manualmente.")
+    else:
+        print("AVISO: Parâmetros de conexão com o banco de dados não fornecidos.")
+        print("As variáveis de ambiente não foram configuradas.")
+    
     print("\nConfiguração de ambiente concluída.")
     print("Agora você deve conseguir executar o aplicativo sem privilégios de administrador.")
     return True
 
 if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
+    try:
+        success = main()
+        sys.exit(0 if success else 1)
+    except Exception as e:
+        logger.error(f"Erro não tratado durante a configuração do ambiente: {str(e)}")
+        print(f"ERRO: {str(e)}")
+        sys.exit(1)
